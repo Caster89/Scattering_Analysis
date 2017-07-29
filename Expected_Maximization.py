@@ -1,4 +1,4 @@
-from config import _AvlbUnits, _UnitsConv, _AvlbSASFit, _AvlbWASFit, _lmfitModels, _lmfitModelFunctions, _lmfitDistFunctions 
+from config import _AvlbUnits, _UnitsConv, _AvlbSASFit, _AvlbWASFit, _lmfitModels, _lmfitModelFunctions, _lmfitDistFunctions
 import numpy as np
 import numpy.matlib
 import logging
@@ -53,7 +53,7 @@ def expected_maximization_method(q, I, Rmin, Rmax=0, Rvec = [], eps = 1e-12, k=3
    ## to insert an extra radius with value 0. This radius has a constant form
    ## factor of 1, and might be used to add/remove a constant background which
    ## was not correctly subtracted.
-   
+
    #I has to be a vertical vector
    I.shape=(len(I),1)
 
@@ -67,11 +67,11 @@ def expected_maximization_method(q, I, Rmin, Rmax=0, Rvec = [], eps = 1e-12, k=3
    #Creation of the radius vector, setting the step based on
    #the number of elements desired
    if not Rvec:
-      Rvec=np.arange(Rmin,Rmax,(Rmax-Rmin)/numbElements)
+      Rvec=np.arange(Rmin,Rmax,float(Rmax-Rmin)/numbElements)
    else:
       Rvec = Rvec
    ##Rvec2 = np.insert(Rvec,0,0)
-   
+
    #Creation of the Volume vector from the radius vector
    Vvec = Rvec**3*4/3*np.pi
    ##Vvec2 = Rvec2**3*4/3*np.pi
@@ -89,7 +89,7 @@ def expected_maximization_method(q, I, Rmin, Rmax=0, Rvec = [], eps = 1e-12, k=3
    #the respective volume
    H = FF*np.matlib.repmat(Vvec,len(q),1)
    ##H2= FF2*np.matlib.repmat(Vvec2,len(q),1)
-   
+
    #The basic components of the algorithm are created
    HT = H.transpose()
    ##HT2 = H2.transpose()
@@ -140,7 +140,7 @@ def expected_maximization_method(q, I, Rmin, Rmax=0, Rvec = [], eps = 1e-12, k=3
             logging.error('Max number of iterations reached')
          cont =False
       i+=1
-      
+
    return [xk1, Rvec, H]
 
 def plot_expected_maximiztion(q, I, Rvec, xk, H, volumeDist = True, ax = None, **kwargs):
@@ -170,10 +170,10 @@ def plot_expected_maximiztion(q, I, Rvec, xk, H, volumeDist = True, ax = None, *
       fig.subplots_adjust(hspace=0.35,wspace = 0.35)
       ax[0] = plt.subplot2grid((1,3),(0,0),rowspan=1,colspan=2)
       ax[1] = plt.subplot2grid((1,3),(0,2),rowspan=1,colspan=1)
-      
+
    ax[0].loglog(q*qConvFact, I*IConvFact, color = 'k', linestyle = 'None', marker = 'o',\
                 markeredgecolor='None', label = 'Experimental Points')
-   
+
    ax[0].loglog(q*qConvFact, np.dot(H,xk)*IConvFact, color = kwargs.get('color','r'),\
                 linewidth = kwargs.get('linewidth',2), label = kwargs.get('label', 'EM Fit'))
    ax[0].legend(loc = 'best', frameon = False, fontsize = 20)
@@ -182,7 +182,7 @@ def plot_expected_maximiztion(q, I, Rvec, xk, H, volumeDist = True, ax = None, *
    ax[0].set_xlabel('Wavevector q ({}$\mathrm{{^{{-1}} }}$)'.format(kwargs.get('qunits','nm')),\
                     fontsize = 22)
    ax[0].set_ylabel('Intensity ({}$\mathrm{{^{{-1}} }}$)'.format(kwargs.get('Iunits','m')),fontsize = 22)
-   
+
    ax[0].set_xlim(min(q*qConvFact)*0.95,max(q*qConvFact)*1.05)
    ax[0].set_ylim(min(I*IConvFact)*0.9,max(I*IConvFact)*1.1)
    #totVolume = np.sum(xk)
@@ -207,7 +207,7 @@ def plot_expected_maximiztion(q, I, Rvec, xk, H, volumeDist = True, ax = None, *
    ax[1].set_xlabel('Radius ({})'.format(kwargs.get('units','nm')),fontsize = 22)
 
 
-   
+
 
 
    return ax

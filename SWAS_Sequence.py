@@ -1,8 +1,9 @@
-from config import _AvlbUnits, _UnitsConv, _AvlbSASFit, _AvlbWASFit, _lmfitModels, _lmfitModelFunctions, _lmfitDistFunctions 
+from config import _AvlbUnits, _UnitsConv, _AvlbSASFit, _AvlbWASFit, _lmfitModels, _lmfitModelFunctions, _lmfitDistFunctions
 from Scattering_Object import ScatteringObject
 from SAS import SmallAngleScattering
 from WAS import WideAngleScattering
 from SWAS import SWAS
+import collections
 import os
 import os.path
 import pickle
@@ -11,6 +12,7 @@ import Expected_Maximization as EM
 import numpy as np
 import numpy.matlib
 import logging
+import sys
 #import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Qt5Agg")
@@ -27,13 +29,13 @@ except ImportError:
 else:
 	lmfitAvlb = True
 	import Fitting_Models
-	
+
 class SWAS_Sequence(object):
 	"""Wrapper class used to collect the data from a time resolved scattering experiment.
 	It consists in a list of SWAS objects. It enables to do fits on all samples consecutively
 	as well as plot the results as a function of time
 	"""
-	
+
 	def __init__(self,SAS_fname_list = None, WAS_fname_list = None, SA_dict = None, WA_dict = None, **kwargs):
 		#self.SAS_objects = None
 		#self.WAS_objects = None
@@ -43,11 +45,11 @@ class SWAS_Sequence(object):
 		self.Temp = None
 		self.avlbCurves = None
 		self.sampleName = kwargs.get('SampleName','Sample')
-		
+
 		if SAS_fname_list is not None or WAS_fname_list is not None:
 			self.create_from_file_list(SAS_fname_list, WAS_fname_list, SA_dict, WA_dict)
 
-	
+
 	def create_from_file_list(self,SAS_fname_list = None, WAS_fname_list = None, SA_dict = None, WA_dict = None):
 		"""create_from_file_list: function to create the SAS/WAS objects and place them in the
 		appropriate list. It also initializes the time and temperature lists.
@@ -99,24 +101,24 @@ class SWAS_Sequence(object):
 			if obj.get_Temp() is not None:
 				self.Temp[i] = obj.get_Temp[i]
 		self.size = len(self.SWAS_objects)
-	
+
 	def find_bckg_scale_SAS(self, qRange = [0,np.inf], applyNorm = False, plot=False, ax = None):
 		for i in range(self.size):
 			self[i].SAS.find_bckg_scale(qRange, applyNorm, plot, ax)
-	
+
 	def find_bckg_scale_WAS(self, qRange = [0,np.inf], applyNorm = False, plot=False, ax = None):
 		for i in range(self.size):
 			self[i].WAS.find_bckg_scale(qRange, applyNorm, plot, ax)
-	
+
 	def set_abs_scale_SAS(self, absCoeff, thickness = None, bckgCoeff = None):
 		for i in range(self.size):
 			print i
 			self[i].SAS.set_abs_scale(absCoeff,thickness,bckgCoeff)
-			
+
 	def set_abs_scale_WAS(self, absCoeff, thickness = None, bckgCoeff = None):
 		for i in range(self.size):
 			self[i].WAS.set_abs_scale(absCoeff,thickness,bckgCoeff)
-		
+
 	def set_temperature(self, Temp):
 		"""set_Temperature: sets the temperature vector, as well as copying the values in the idividual
 		scattering objects:
@@ -133,11 +135,11 @@ class SWAS_Sequence(object):
 				print 'If  list of temperatures is given it must have the same size as the number\
 				of curves. Numb. Curves: {}, Numb. Temp: {}'.format(len(self.SWAS_objects),len(Temp))
 				return 0
-			
+
 			self.Temp = np.array(Temp)
 			for i in xrange(len(self.SWAS_objects)):
 				self.SWAS_objects[i].set_Temp(Temp[i])
-	
+
 	def set_time(self, time):
 		"""set_time: sets the time vector, as well as copying the values in the individual
 		scattering objects:
@@ -145,30 +147,30 @@ class SWAS_Sequence(object):
 				Temp (int or list): ether an int (if the temperature is constant), or a list.
 					If a list is provided it must have the same lengths a the number of objects
 		"""
-		
+
 		if len(time) != len(self.SWAS_objects):
 			print 'If  list of time is given it must have the same size as the number\
 			of curves. Numb. Curves: {}, Numb. Temp: {}'.format(len(self.SWAS_objects),len(time))
 			return 0
-			
+
 		self.time = np.array(time)
 		for i in xrange(len(self.SWAS_objects)):
 				self.SWAS_objects[i].set_Dt(time[i])
-	
+
 	def plot_SAS_Sequence(self, qRange=[0,np.inf], frequency=10, yShift = 10, ax = None , colormap = matplotlib.cm.jet, **kwargs):
 		if ax is None:
 			fig = Figure(figsize = figSize)
 			ax = fig.add_subplot(111)
 		for i,idx in enumerate(range(0,self.size, frequency)):
 			self[idx].SAS.plot_data(qRange, yShift = 10**(yShift*i), ax = ax, color = colormap(float(idx)/float(self.size)))
-			
+
 	def plot_WAS_Sequence(self, qRange=[0,np.inf], frequency=10, yShift = 10, ax = None , colormap = matplotlib.cm.jet, **kwargs):
 		if ax is None:
 			fig = Figure(figsize = figSize)
 			ax = fig.add_subplot(111)
 		for i,idx in enumerate(range(0,self.size, frequency)):
 			self[idx].WAS.plot_data(qRange, yShift = yShift*i, ax = ax, color = colormap(float(idx)/float(self.size)))
-		
+
 	def fit_data(self, fitType, fitList = -1, memory = False, **kwargs):
 		"""fit_data is used to fit the data in the SWAS_Sequence file
 			Args:
@@ -184,30 +186,39 @@ class SWAS_Sequence(object):
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 		else:
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-			
-			
-		if fitList == -1:
+
+
+		if not isinstance(fitList, collections.Iterable):
 			fitList = range(self.size)
 		if fitType in _AvlbSASFit:
+			#if fitType in _lmfitModels:
 			if memory:
 				self.SWAS_objects[fitList[0]].fit_SAS(fitType, **kwargs)
 				params = self.SWAS_objects[fitList[0]].SAS.get_fit_params(fitType)
 				for i in fitList[1:]:
-					logging.debug('Fitting curve {}'.format(i))
+					if i%100 == 0:
+						print 'SWAS_Sequence.fit_data(): Fitting curve {}'.format(i)
+					logging.debug('SWAS_Sequence.fit_data(): Fitting curve {}'.format(i))
 					try:
-						self.SWAS_objects[i].fit_SAS(fitType, paramSugg = params)
+						self.SWAS_objects[i].SAS.fit_data(fitType, paramSugg = params, **kwargs)
+						#self.SWAS_objects[i].fit_SAS(fitType, paramSugg = params, **kwargs)
 						params = self.SWAS_objects[i].get_fit_params(fitType)
 					except:
-						logging.error('At object {}, lmfit failed to do the fit'.format(i))
-						
+						logging.error('SWAS_Sequence.fit_data():At object {}, lmfit failed to do the fit and returned with error:\n{}'.format(i,sys.exc_info()[0]))
+						#logging.error('')
+
 			else:
 				for i in fitList:
+					if i%100 == 0:
+						print 'SWAS_Sequence.fit_data(): Fitting curve {}'.format(i)
 					logging.debug('Fitting curve {}'.format(i))
-					try:
-						self.SWAS_objects[i].fit_SAS(fitType, **kwargs)
-					except:
-						print 'At object {}, lmfit failed to do the fit'.format(i)
-						
+					#try:
+					self.SWAS_objects[i].SAS.fit_data(fitType, **kwargs)
+					#self.SWAS_objects[i].fit_SAS(fitType, **kwargs)
+					#except:
+					#logging.error('SWAS_Sequence.fit_data():At object {}, lmfit failed to do the fit and returned with error:\n{}'.format(i,sys.exc_info()[0]))
+						#logging.error('')
+
 		elif fitType in _AvlbWASFit:
 			if memory:
 				self.SWAS_objects[fitList[0]].fit_WAS(fitType, **kwargs)
@@ -223,26 +234,27 @@ class SWAS_Sequence(object):
 						self[i].fit_WAS(**kwargs)
 					except ZeroDivisionError:
 						print 'At object {}, lmfit failed to do the fit'.format(i)
-					
+
 		else:
 			print 'Fit type {} is not recognized'.format(fitType)
-			
+
 	def plot_param(self, fitType, param, ax = None, **kwargs):
 		'''plot_param: function used to plot the evolution of a parameter
 		over the sequence.
 			Args:
 			fitType (String): the fit for which the parameter should be
 				plotted. Can be any one of the fits available
-			param (String): the parameter which should be plotted. In case
+			param (list: String): the parameter which should be plotted. In case
 				of WAS peak fitting this can either be the parameter
 				of a single peak or the parameter of all the peaks
 			ax (list: mpl.axes): a list of axis on which the parameters
 				should be plotted.
 			**kwargs (dict): the various parameters for the plotting of the data
 		'''
-		
+
 		if fitType in _AvlbSASFit:
 			if fitType in _lmfitModels:
+				#
 				plotData = [obj.SAS.get_fit_params(fitType, param = param) for obj in self.SWAS_objects]
 				numbPlots = len(plotData[0])
 				if ax is None or len(ax)<numbPlots:
@@ -252,9 +264,9 @@ class SWAS_Sequence(object):
 						ax.append(fig.add_subplot(numbPlots,1,(i+1)))
 				self._plot_lmfit_param(plotData,ax)
 			elif fitType == 'EM':
-				plotData = [obj.SAS.EMFit for obj in self.SWAS_objects]
+				plotData = [obj.SAS.fitResults['EM'] for obj in self.SWAS_objects]
 				self._plot_em_param(ax, plotData, **kwargs)
-				
+
 
 		if fitType in _AvlbWASFit:
 			if fitType == 'PVM':
@@ -266,7 +278,7 @@ class SWAS_Sequence(object):
 					for i in xrange(numbPlots):
 						ax.append(fig.add_subplot(numbPlots,1,(i+1)))
 				self._plot_PVM_param(plotData,ax)
-	
+
 	def _plot_PVM_param(self, paramList, ax, **kwargs):
 		'''_plot_PVM_param: specific function used to plot the evolution
 		of the parameters from a Pseudo-Voigt fit.
@@ -276,7 +288,7 @@ class SWAS_Sequence(object):
 		for i,k in enumerate(keys):
 			tempPlot = [params.get(k,None) if params is not None else None for params in paramList]
 			ax[i].scatter(self.time,tempPlot, c = self.time, cmap = kwargs.get('cmap', matplotlib.pyplot.cm.jet), edgecolor = 'face')
-	
+
 	def _plot_lmfit_param(self, paramList,ax, **kwargs):
 		'''_plot_lmfit_param: specific function used to plot the evolution
 		of the parameters from a lmfit fit
@@ -286,7 +298,7 @@ class SWAS_Sequence(object):
 		for i,k in enumerate(keys):
 			tempPlot = [params.get(k,None) if params is not None else None for params in paramList]
 			ax[i].scatter(self.time,tempPlot, c = self.time, cmap = kwargs.get('cmap', matplotlib.pyplot.cm.jet), edgecolor = 'face')
-	
+
 	def _plot_em_param(self, ax, paramList, **kwargs):
 
 		if kwargs.get('verbose', False):
@@ -295,7 +307,7 @@ class SWAS_Sequence(object):
 		else:
 			print ' verbose is false'
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-			
+
 
 		#logging.info('Plotting the evolution of the EM curve is still not implemented')
 		#if not isinstance(ax, Axes3D):
@@ -305,11 +317,34 @@ class SWAS_Sequence(object):
 		print 'There are {} data sets'.format(self.size)
 		print 'The radius vector is divided in {} points'.format(paramList[0]['Rvec'].size)
 		for i in xrange(self.size):
-			
+
 			Dist[i] = paramList[i]['xk'].reshape((-1))
 		ax.imshow(Dist.T)
 		#ax.set_ylim(paramList[0]['Rvec'][0],paramList[0]['Rvec'][-1])
 		#ax.set_xlim(self.time[0],self.time[-1])
+
+	def plot_SAS_fit(self, fitType, frequency = 50, yshift = 1, ax = None, fig = None, **kwargs):
+		'''plot_SAS_fit is used to plot the SAS date on a single axis along with
+		the fitted model.
+		'''
+		if kwargs.get('verbose', False):
+			print 'logging set to debug'
+			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.DEBUG)
+		else:
+			print 'logging set to info'
+			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.INFO)
+		if (ax is None) or (fig is None):
+			fig = Figure(figsize=kwargs.get('figsize',(10,10)))
+			ax = [fig.add_subplot(111)]
+		elif isinstance(ax, list):
+			if not isinstance(ax[0], matplotlib.axes.Axes):
+				fig = Figure(figsize=kwargs.get('figsize',(10,10)))
+				ax = [fig.add_subplot(111)]
+		elif isinstace(ax, matplotlib.axes.Axes):
+			ax = [ax]
+		for ii,obj in enumerate(self.SWAS_objects[::frequency]):
+			obj.SAS.plot_fit(fitType, ax, fig, yshift = ii*yshift, plotDistribution = False, **kwargs)
+
 	def save_to_file(self, directory = None, fileName = None):
 		"""save_to_file: saves the class to a file.
 			Args:
@@ -335,10 +370,10 @@ class SWAS_Sequence(object):
 					else:
 						fileName = str(n) + '.p'
 						exists = False
-		
+
 		with open(os.path.join(directory, fileName),'wb') as f:
 			pickle.dump(self,f)
-		
+
 	@staticmethod
 	def load_from_file(directory, filename):
 		if os.path.isfile(os.path.join(directory,filename)):
@@ -347,6 +382,6 @@ class SWAS_Sequence(object):
 		else:
 			print os.path.join(directory, fileName), ' is not a file'
 			return None
-		
+
 	def __getitem__(self,n):
 		return self.SWAS_objects[n]

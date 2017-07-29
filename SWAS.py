@@ -1,4 +1,4 @@
-from config import _AvlbUnits, _UnitsConv, _AvlbSASFit, _AvlbWASFit, _lmfitModels, _lmfitModelFunctions, _lmfitDistFunctions 
+from config import _AvlbUnits, _UnitsConv, _AvlbSASFit, _AvlbWASFit, _lmfitModels, _lmfitModelFunctions, _lmfitDistFunctions
 from Scattering_Object import ScatteringObject
 from SAS import SmallAngleScattering
 from WAS import WideAngleScattering
@@ -26,16 +26,16 @@ except ImportError:
 else:
 	lmfitAvlb = True
 	import Fitting_Models
-	
+
 class SWAS(object):
-	
+
 	def __init__(self, Sample_Name = 'Sample', SA_Fname = None, WA_Fname = None, SA_dict = None, WA_dict = None, **kwarg):
 		"""Initialized the object. This is basically a wrapper function to initialize
 		either the SAS object or the WAS object or both.
 			Args:
 				SA_Fname (string): the name of the file containing the SAS data. If None
 					the SAS is not
-					
+
 				WA_Fname (string): the name of the file containing the WAS
 		"""
 		self.SAS = None
@@ -45,9 +45,9 @@ class SWAS(object):
 		#Copying the dictionary is necessary if not when setting the sample name
 		#the dictionary would be modified (python always "passes by reference").
 		#This caouses problems with the SWAS Sequence class
-		
 
-		
+
+
 		if SA_Fname is not None:
 			tempSA_dict = SA_dict.copy()
 			if SA_dict.get('SampleName', None) is None:
@@ -80,13 +80,13 @@ class SWAS(object):
 			return self.WAS.IAbs
 		elif arg == 'IwBckg':
 			return self.WAS.Ibckg
-	
+
 	def import_SA_from_file(self, fname, **kwargs):
 		self.SAS = SmallAngleScattering(fname, **kwargs)
-	
+
 	def import_WA_from_file(self, fname, **kwargs):
 		self.WAS = WideAngleScattering(fname, **kwargs)
-		
+
 	def plot_data(self, qsRange=[0,np.inf],qwRange = [0, np.inf], ysShift=1, ywShift = 1, axs = None, fig = None,\
 				  xUnits = 'nm', yUnits ='m', **kwargs):
 		"""plot_data: plots both the SAS and WAS data in the same image. Takes the same parameters as
@@ -105,12 +105,12 @@ class SWAS(object):
 			Returns:
 				the axes list and the figure
 		"""
-		#print 
+		#print
 		#axs = kwargs.pop('axs', None)
 		#print 'the axs array has length :', len(axs)
 		#print 'and they are: ', axs
-		
-		
+
+
 		#fig = kwargs.pop('fig', None)
 		if fig is None:
 			#print 'had to create the figure'
@@ -120,20 +120,20 @@ class SWAS(object):
 			axs = []
 			axs.append(fig.add_subplot(121))
 			axs.append(fig.add_subplot(122))
-		
+
 		self.SAS.plot_data(qRange = qsRange, yShift = ysShift, ax = axs[0], **kwargs)
 		self.WAS.plot_data(qRange = qwRange, yShift = ywShift, ax = axs[1], **kwargs)
-		
+
 		return [axs, fig]
-	
+
 	def fit_guinier_regime(self, error_lim = 0.01, min_q = 3,skip_initial = 0, plot_guinier = False):
 		return self.SAS.fit_guinier_regime( error_lim, min_q,skip_initial, plot_guinier)
-	
+
 	def find_porod_invariant(self,drho, units = 'm', qRange = [0,np.inf], precision = 0.1, postExtrap = None,\
 						preExtrap = None, plot_porod = False):
 		return self.SAS.find_porod_invariant(drho, units, qRange, precision, postExtrap,\
 						preExtrap, plot_porod)
-	
+
 	def fit_data(self, fitType, **kwargs):
 		if fitType in _AvlbSASFit:
 			self.fit_SAS(fitType, **kwargs)
@@ -141,25 +141,25 @@ class SWAS(object):
 			self.fit_WAS(fitType, **kwargs)
 		else:
 			print 'Fit type {} is not recognized'.format(fitType)
-	
-	def fit_SAS(self, fitType = "Sing_Gauss",**kwargs):
-		self.SAS.fit_data(fitType,**kwargs)
-	
+
+	def fit_SAS(self, fitType = "Sing_Gauss", **kwargs):
+		self.SAS.fit_data(fitType, **kwargs)
+
 	def fit_WAS(self, fitType = 'PVM', **kwargs):
 		self.WAS.fit_peaks(fitType, **kwargs)
-	
+
 	def plot_fit(self, fitType, ax = None, **kwargs):
 		if fitType in _AvlbSASFit:
 			plot_SAS_fit(fitType, ax, **kwargs)
 		if fitType in _AvlbWASFit:
 			plot_WAS_fit(fitType, ax, **kwargs)
-	
+
 	def plot_SAS_fit(self, fitType,ax = None, **kwargs):
 		return self.SAS.plot_fit(fitType,ax, **kwargs)
-	
+
 	def plot_WAS_fit(self, fitType,ax = None, **kwargs):
 		return self.WAS.plot_fit(fitType,ax, **kwargs)
-	
+
 	def get_Temp(self):
 		if self.avlbCurves is 'Both':
 			Temps = self.SAS.setup['Temp']
@@ -176,14 +176,14 @@ class SWAS(object):
 		elif self.avlbCurves is 'WAS':
 			Tempw = self.WAS.setup['Temp']
 			return Tempw
-		
-	
+
+
 	def set_Temp(self, Temp):
 		if self.SAS is not None:
 			self.SAS.setup['Temp'] = Temp
 		if self.WAS is not None:
 			self.WAS.setup['Temp'] = Temp
-	
+
 	def get_Dt(self):
 		if self.avlbCurves is 'Both':
 			Dts = self.SAS.setup['Dt']
@@ -198,13 +198,13 @@ class SWAS(object):
 			return self.SAS.setup['Dt']
 		elif self.avlbCurves is 'WAS':
 			return 	AS.setup['Dt']
-	
+
 	def set_Dt(self, Dt):
 		if self.SAS is not None:
 			self.SAS.setup['Dt'] = Dt
 		if self.WAS is not None:
 			self.WAS.setup['Dt'] = Dt
-	
+
 	def save_to_file(self, directory = None, fileName = None):
 		"""save_to_file: saves the class to a file.
 			Args:
@@ -230,10 +230,10 @@ class SWAS(object):
 					else:
 						fileName = str(n) + '.p'
 						exists = False
-		
+
 		with open(os.path.join(directory, fileName),'wb') as f:
 			pickle.dump(self,f)
-		
+
 	@staticmethod
 	def load_from_file(directory, filename):
 		if os.path.isfile(os.path.join(directory,filename)):
@@ -242,4 +242,3 @@ class SWAS(object):
 		else:
 			print os.path.join(directory, fileName), ' is not a file'
 			return None
-
