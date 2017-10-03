@@ -43,57 +43,72 @@ class SmallAngleScattering(ScatteringObject):
 	different fitting methods available. The different methods can be divided in
 	2 main categories: those using the lmfit library and the one based on the
 	expected maximization method. The former are not available if the lmfit module
-	was not correctly loaded.
+	was not correctly loaded. It is also possible to first fit using the EM
+	method, and later use it as a starting point for the lmfit fit.
 	"""
 	def __init__(self,fname,**kwargs):
-
-		#self.singleGauss = None
-		#self.doubleGauss = None
-		#self.singleSchultz = None
-		#self.doubleSchultz = None
-		#self.EMFit = None
+		'''The results of the fit are store in a dictionary, which is initaiate
+		with None values using the available fits described in _AvlbSASFit. Two
+		other dictionaries are created ot store the result from the porod
+		invariant and the guinier regime
+		'''
 		self.fitResults = {f : None for f in _AvlbSASFit}
 		self.porod_invariant = None
 		self.guinier_regime = None
 
 		super(SmallAngleScattering, self).__init__(fname, **kwargs)
 
-	def plot_data(self, qRange=[0,np.inf],yShift=1, ax = None, figSize = (6,6), xUnits = None, yUnits =None,\
-					**kwargs):
-		"""plot_data: Plots the data in a log-log plot. If the axis is passed then the data is plotted
-		on the given axis, if not a figure of size figSize is created and the axis places in
-		it. The units on the x and y axis can be selected. The keyword arguments are used
-		to set the parameters of the plots.
+	def plot_data(self, qRange=[0,np.inf],yShift=1, ax = None, figSize = (6,6),\
+	 			  xUnits = None, yUnits =None, plot_dic={}, axLabelSize = 20,\
+				  labelSize = 18, tickSize = 6, tickWidth = 3):
+		"""plot_data: Plots the data in a log-log plot. If the axis is passed
+		then the data is plotted on the given axis, if not a figure of size
+		figSize is created and the axis places in it. The units on the x and y
+		axis can be selected. The keyword arguments are used to set the
+		parameters of the plots.
 			Args:
-				qRange (list): the q-range over which the data should be plotted. Defaults to
-					[0, np.inf]
-				yShift (int): indicated by how much the data should be shifted vertically. This
-					allows the plot_data function to be used in time resolved data. The data is
-					multiplied by shift because it is plotted in loglog. Defaults to 1
-				ax (:obj: plt.axes): the axis on which to plot the data. If it is not provided
-					then one will be created. Defaults to None
-				figSize (tuple): used to set the size of the figure in case the axis is not
-					provided. Defaults to (6,6)
-				xUnits (string): the units used on the x-axis. They have to be defined in the
-					_AvlbUnits in the config.py file. Defaults to nm
-				yUnits (string): the units used on the xy-axis. They have to be defined in the
-					_AvlbUnits in the config.py file. Defaults to m
+				-qRange (list): the q-range over which the data should be
+					plotted. Defaults to [0, np.inf]
+				-yShift (int): indicated by how much the data should be shifted
+					vertically. This allows the plot_data function to be used in
+					time resolved data. The data is multiplied by shift because
+					it is plotted in loglog. Defaults to 1
+				-ax (:obj: plt.axes): the axis on which to plot the data. If it
+					is not provided then one will be created. Defaults to None
+				-figSize (tuple): used to set the size of the figure in case the
+					axis is not provided. Defaults to (6,6)
+				-xUnits (string): the units used on the x-axis. They have to be
+					defined in the _AvlbUnits in the config.py file. Defaults to
+					nm
+				-yUnits (string): the units used on the xy-axis. They have to be
+					defined in the _AvlbUnits in the config.py file. Defaults to
+					m
+				-plot_dic(dict): any keyword used by matplotlib in plot can be
+					placed here to influence the appearance of the plot
 				**kwargs: all the arguments used to set the values of the plot.
+					-axLabelSize (int): the size of the font used for the lable
+						of the x and y axis ('Wavelength' and 'Intensity')
+					-labelSize (int): the size of the numbers along the x and y
+						axis.
+					-tickSize (int): the length of the major tickmarks on the x
+						and y axis
+					-tickWidth (int): the width of the major tickmarks on the x
+						and y axis
 			Returns:
 				ax (:obj: plt.axes): the axis on which the data was plotted
 				fig (:obj: plt.fig): the figure on which the data was plotted
 		"""
-		#Any keywords which might alter the plotting parameters are stored
-		#in the dictionary. This also allows the next plot to retain the
-		#same plotting style.
+
 		if kwargs.get('verbose', False):
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 		else:
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-
+		#Any keywords which might alter the plotting parameters are stored
+		#in the dictionary. This also allows the next plot to retain the
+		#same plotting style.
 		for k in self.plot_dict:
-			if k in kwargs:
-				self.plot_dict[k] = kwargs[k]
+			if k in plot_dic:
+				self.plot_dict[k] = plot_dic[k]
 		#plt.ion()
 		if ax is None:
 			fig = Figure(figsize = figSize)
@@ -119,12 +134,13 @@ class SmallAngleScattering(ScatteringObject):
 			yUnits = self.IUnits
 		logging.debug('SAS.plot_data():\nqConvCoeff: {}\nIConvCoeff: {}'.format(qConvCoeff,IConvCoeff))
 
-		if self.Ierr is not None and kwargs.get('plot_error', False):
-			#This part was modified, instead of asking the values every time, a plot dictionary was created
-			#to store all the properties, and is updated in case new parameters are passed to the plotting
-			#function.
+		if (self.Ierr is not None) and (kwargs.get('plot_error', False)):
+			'''
+			This part was modified, instead of asking the values every time, a
+			plot dictionary was created to store all the properties, and is
+			updated in case new parameters are passed to the plotting function.
+			'''
 			ax.errorbar(tempq*qConvCoeff,tempI*IConvCoeff*yShift,yerr = tempE*IConvCoeff*yShift, **self.plot_dict)
-
 					#color = kwargs.get('color','k'),\
 		 			#linestyle = kwargs.get('linestyle', 'None'),marker = kwargs.get('marker','o'),\
 		 			#markeredgecolor = kwargs.get('color','k'), ms = kwargs.get('ms',2))
@@ -133,10 +149,10 @@ class SmallAngleScattering(ScatteringObject):
 		else:
 			logging.debug('SAS.plot_data():\nplotting q: {}\nplotting I: {}'.format(tempq*qConvCoeff,tempI[10:]*IConvCoeff*yShift))
 			ax.loglog(tempq*qConvCoeff,tempI*IConvCoeff*yShift, **self.plot_dict)
-
 					  #color = kwargs.get('color','k'),\
 						#linestyle = kwargs.get('linestyle', 'None'),marker = kwargs.get('marker','o'),\
 						#markeredgecolor = kwargs.get('color','k'), ms = kwargs.get('ms',2))
+
 		#Set the x an y limits
 		ax.set_ylim(min(tempI[np.isfinite(tempI)]*IConvCoeff*yShift),max(tempI[np.isfinite(tempI)]*IConvCoeff*yShift))
 		ax.set_xlim(min(tempq[np.isfinite(tempI)]*qConvCoeff),max(tempq[np.isfinite(tempI)]*qConvCoeff))
@@ -145,17 +161,17 @@ class SmallAngleScattering(ScatteringObject):
 		if xUnits in _AvlbUnits:
 			ax.set_xlabel(r'Wavevector ({}$^{{-1}}$)'.format(_UnitsSymbols[xUnits]), fontsize = kwargs.get('lableSize',20))
 		else:
-			ax.set_xlabel(r'Wavevector'.format(xUnits), fontsize = kwargs.get('lableSize',20))
+			ax.set_xlabel(r'Wavevector', fontsize = axLabelSize)
 		if yUnits in _AvlbUnits:
 			ax.set_ylabel(r'Intensity ({}$^{{-1}}$)'.format(_UnitsSymbols[yUnits]), fontsize = kwargs.get('lableSize',20))
 		else:
-			ax.set_ylabel(r'Intensity', fontsize = kwargs.get('lableSize',20))
-		ax.tick_params(labelsize = kwargs.get('labelSize',18),size = kwargs.get('tickSize',6),
-		 				width = kwargs.get('tickWidth',3) )
+			ax.set_ylabel(r'Intensity', fontsize = axLabelSize)
+		ax.tick_params(labelsize = labelSize, size = tickSize,
+		 				width = tickWidth)
 		#implement a method to place the major and minor tick marks
-		return ax
+		return (ax, fig)
 
-	def plot_slopes(self, slope, frequency = 10,slope_color ='k', **kwargs):
+	def plot_slopes(self, slope, frequency = 10,slope_color ='k', ax = None, **kwargs):
 		"""plot_slopes: plots the data along with a series of parallel lines with given slope.
 		this can be useful when trying ot detrmine the slope of a particlare scattering curve.
 			Args:
@@ -165,20 +181,19 @@ class SmallAngleScattering(ScatteringObject):
 					therefore be frequency^(n)*x^slope. Defaults to 10
 				slope_color (char): a valid character to define the color with which the
 					sloped lines should be drawn. Defaults to 'k' (black)
+				ax (obj:axis): the axis on which to draw the slopes
 				**kwargs (dict): any keywords which can be used with the plot_data function
-			Retruns:
+			Retuns:
 				the axis and the figure of the plot
 		"""
 		slope = -abs(slope)
-		#plt.ion()
+
 		#If no axis is given it is supposed that the slopes have to be drawn
 		#over the data from the object, therefore the data will be drawn and the
 		#lines added
-		if kwargs.get('ax', None) is None:
-			ax, _ = self.plot_data()
-		else:
-			ax = kwargs.get('ax')
-
+		if ax is None:
+			ax, fig = self.plot_data(**kwargs)
+		##qRange could be substituted by ax.limits
 		qRange = kwargs.get('qRange',[0,np.inf])
 		mask = np.logical_and(self.q>min(qRange), self.q<max(qRange))
 		tempq = self.q[mask]
@@ -201,16 +216,18 @@ class SmallAngleScattering(ScatteringObject):
 		return [ax,fig]
 
 	def fit_data(self, fitType = "Sing_Gauss",**kwargs):
-		"""fit_data: wrapper function used to decide which fitting algorithm to use
-		and to set it up.
+		"""fit_data: wrapper function used to decide which fitting algorithm to
+		use and to set it up.
 			Args:
-				fitType (string): the method used for fitting the data. Has to be defined in _AvlbSASFit
-					contained in config.py. Defaults to Sing_Gauss.
-				**kwargs (dict):
-					The keywords to pass to the defired fitting method.
-					plot (bool): whether to plot or not the fit. Defaults to False
-					paramSugg (dict): dictionary passed on to the create_params function. It containes
-						any suggestion used to create the parameters
+				-fitType (string): the method used for fitting the data. Has to
+					be defined in _AvlbSASFit contained in config.py. Defaults
+					to Sing_Gauss.
+				**kwargs (dict): The keywords to pass to the desired fitting method.
+					-plot (bool): whether to plot or not the fit.
+						Defaults to False
+					-paramSugg (dict): dictionary passed on to the create_params
+						function. It containes any suggestion used to create the
+						parameters
 
 		"""
 
@@ -222,7 +239,7 @@ class SmallAngleScattering(ScatteringObject):
 		#package, it is in fact available
 		if fitType in _lmfitModels:
 			if not lmfitAvlb:
-				print "Impossible to fit using {} model because lmfit was not importent.".format(type)
+				logging.error()"Impossible to fit using {} model because lmfit was not importent.".format(fitType))
 				return 0
 
 			params = self.create_params(fitType, kwargs.get('paramSugg', {}))
@@ -244,90 +261,117 @@ class SmallAngleScattering(ScatteringObject):
 			return 0
 
 	def create_params(self, fitType, paramSugg = {}):
-		"""create_params: creates the Parameter object for the lmfit package based on the
-		type of fit which is chosen between the available fits.
+		"""create_params: creates the Parameter object for the lmfit package
+		based on the type of fit which is chosen between the available fits.
 			Args:
-				fitType (string): the method used for fitting. Has to be defined in _lmfitModels
-				paramSugg (dict): dictionary containing all the default values for the parameters.
-					these depend on the fit used.
+				fitType (string): the method used for fitting. Has to be defined
+					in _lmfitModels
+				paramSugg (dict): dictionary containing all the default values
+					for the parameters. These depend on the fit used.
 			Returns:
-				params (:obj: Parameters): a Parameters object from the lmfit package with all
-					the parameters needed to fit using the selected model.
+				params (:obj: Parameters): a Parameters object from the lmfit
+				 	package with all the parameters needed to fit using the
+					selected model.
 
 		"""
 		params = lmfit.Parameters()
 		if fitType == "Sing_Gauss":
-			params.add("R_av", value = paramSugg.get('R_av',10), min = paramSugg.get('R_min',0),\
-					 max = paramSugg.get('R_max',None),vary = paramSugg.get('R_vary',True))
-			params.add("sigma", value = paramSugg.get('sigma',0.5), min = paramSugg.get('sigma_min',0),\
-					 max = paramSugg.get('sigma_max',None),vary = paramSugg.get('sigma_vary',True))
-			params.add("I0", value = paramSugg.get('I0',1), min = paramSugg.get('I0_min',None),\
-					 max = paramSugg.get('I0_max',None),vary = paramSugg.get('I0_vary',True))
-			params.add("bckg", value = paramSugg.get('bckg',0), min = paramSugg.get('bckg_min',None),\
-					 max = paramSugg.get('bckg_max',None),vary = paramSugg.get('bckg_vary',False))
+			params.add("R_av", value = paramSugg.get('R_av',10),\
+						min = paramSugg.get('R_min',0),\
+					 	max = paramSugg.get('R_max',None),\
+						vary = paramSugg.get('R_vary',True))
+			params.add("sigma", value = paramSugg.get('sigma',0.5),\
+			 			min = paramSugg.get('sigma_min',0),\
+					 	max = paramSugg.get('sigma_max',None),\
+						vary = paramSugg.get('sigma_vary',True))
+
 
 		elif fitType == "Double_Gauss":
-			params.add("R1_av", value = paramSugg.get('R1_av',5), min = paramSugg.get('R1_min',0),\
-					 max = paramSugg.get('R1_max',None),vary = paramSugg.get('R1_vary',True))
-			params.add("sigma1", value = paramSugg.get('sigma1',0.5), min = paramSugg.get('sigma1_min',0),\
-					 max = paramSugg.get('sigma1_max',None),vary = paramSugg.get('sigma1_vary',True))
-			params.add("R2_av", value = paramSugg.get('R2_av',10), min = paramSugg.get('R2_min',0),\
-					 max = paramSugg.get('R2_max',None),vary = paramSugg.get('R2_vary',True))
-			params.add("sigma2", value = paramSugg.get('sigma2',0.5), min = paramSugg.get('sigma2_min',0),\
-					 max = paramSugg.get('sigma2_max',None),vary = paramSugg.get('sigma2_vary',True))
-			params.add("ratio", value = paramSugg.get('ratio',0.5), min = paramSugg.get('ratio_min',0),\
-					 max = paramSugg.get('ratio_max',1),vary = paramSugg.get('ratio_vary',True))
-			params.add("I0", value = paramSugg.get('I0',1), min = paramSugg.get('I0_min',None),\
-					 max = paramSugg.get('I0_max',None),vary = paramSugg.get('I0_vary',True))
-			params.add("bckg", value = paramSugg.get('bckg',0), min = paramSugg.get('bckg_min',None),\
-					 max = paramSugg.get('bckg_max',None),vary = paramSugg.get('bckg_vary',False))
+			params.add("R1_av", value = paramSugg.get('R1_av',5),\
+						min = paramSugg.get('R1_min',0),\
+					 	max = paramSugg.get('R1_max',None),\
+						vary = paramSugg.get('R1_vary',True))
+			params.add("sigma1", value = paramSugg.get('sigma1',0.5),
+			 			min = paramSugg.get('sigma1_min',0),\
+					 	max = paramSugg.get('sigma1_max',None),\
+						vary = paramSugg.get('sigma1_vary',True))
+			params.add("R2_av", value = paramSugg.get('R2_av',10),\
+						min = paramSugg.get('R2_min',0),\
+					 	max = paramSugg.get('R2_max',None),\
+						vary = paramSugg.get('R2_vary',True))
+			params.add("sigma2", value = paramSugg.get('sigma2',0.5),\
+						min = paramSugg.get('sigma2_min',0),\
+					 	max = paramSugg.get('sigma2_max',None),\
+						vary = paramSugg.get('sigma2_vary',True))
+			params.add("ratio", value = paramSugg.get('ratio',0.5),\
+						min = paramSugg.get('ratio_min',0),\
+					 	max = paramSugg.get('ratio_max',1),\
+						vary = paramSugg.get('ratio_vary',True))
+
 
 		elif fitType == "Sing_Schultz":
-			params.add("R_av", value = paramSugg.get('R_av',10), min = paramSugg.get('R_min',0),\
-					 max = paramSugg.get('R_max',None),vary = paramSugg.get('R_vary',True))
-			params.add("Z", value = paramSugg.get('Z',10), min = paramSugg.get('Z_min',0),\
-					 max = paramSugg.get('Z_max',None),vary = paramSugg.get('Z_vary',True))
-			params.add("I0", value = paramSugg.get('I0',1), min = paramSugg.get('I0_min',None),\
-					 max = paramSugg.get('I0_max',None),vary = paramSugg.get('I0_vary',True))
-			params.add("bckg", value = paramSugg.get('bckg',0), min = paramSugg.get('bckg_min',None),\
-					 max = paramSugg.get('bckg_max',None),vary = paramSugg.get('bckg_vary',False))
+			params.add("R_av", value = paramSugg.get('R_av',10),\
+						min = paramSugg.get('R_min',0),\
+					 	max = paramSugg.get('R_max',None),\
+						vary = paramSugg.get('R_vary',True))
+			params.add("Z", value = paramSugg.get('Z',10),\
+						min = paramSugg.get('Z_min',0),\
+					 	max = paramSugg.get('Z_max',None),
+						vary = paramSugg.get('Z_vary',True))
+
 
 		elif fitType == "Double_Schultz":
-			params.add("R1_av", value = paramSugg.get('R1_av',5), min = paramSugg.get('R1_min',0),\
-					 max = paramSugg.get('R1_max',None),vary = paramSugg.get('R1_vary',True))
-			params.add("Z1", value = paramSugg.get('Z1',10), min = paramSugg.get('Z1_min',0),\
-					 max = paramSugg.get('Z1_max',None),vary = paramSugg.get('Z1_vary',True))
-			params.add("R2_av", value = paramSugg.get('R2_av',10), min = paramSugg.get('R2_min',0),\
-					 max = paramSugg.get('R2_max',None),vary = paramSugg.get('R2_vary',True))
-			params.add("Z2", value = paramSugg.get('Z2',10), min = paramSugg.get('Z2_min',0),\
-					 max = paramSugg.get('Z2_max',None),vary = paramSugg.get('Z2_vary',True))
-			params.add("ratio", value = paramSugg.get('ratio',0.5), min = paramSugg.get('ratio_min',0),\
-					 max = paramSugg.get('ratio_max',1),vary = paramSugg.get('ratio_vary',True))
-			params.add("I0", value = paramSugg.get('I0',1), min = paramSugg.get('I0_min',None),\
-					 max = paramSugg.get('I0_max',None),vary = paramSugg.get('I0_vary',True))
-			params.add("bckg", value = paramSugg.get('bckg',0), min = paramSugg.get('bckg_min',None),\
-					 max = paramSugg.get('bckg_max',None),vary = paramSugg.get('bckg_vary',False))
+			params.add("R1_av", value = paramSugg.get('R1_av',5),\
+						min = paramSugg.get('R1_min',0),\
+					 	max = paramSugg.get('R1_max',None),\
+						vary = paramSugg.get('R1_vary',True))
+			params.add("Z1", value = paramSugg.get('Z1',10),\
+						min = paramSugg.get('Z1_min',0),\
+					 	max = paramSugg.get('Z1_max',None),\
+						vary = paramSugg.get('Z1_vary',True))
+			params.add("R2_av", value = paramSugg.get('R2_av',10),\
+						min = paramSugg.get('R2_min',0),\
+					 	max = paramSugg.get('R2_max',None),\
+						vary = paramSugg.get('R2_vary',True))
+			params.add("Z2", value = paramSugg.get('Z2',10),\
+						min = paramSugg.get('Z2_min',0),\
+					 	max = paramSugg.get('Z2_max',None),\
+						vary = paramSugg.get('Z2_vary',True))
+			params.add("ratio", value = paramSugg.get('ratio',0.5),\
+						min = paramSugg.get('ratio_min',0),\
+					 	max = paramSugg.get('ratio_max',1),\
+						vary = paramSugg.get('ratio_vary',True))
+
+		params.add("I0", value = paramSugg.get('I0',1),\
+					min = paramSugg.get('I0_min',None),\
+					max = paramSugg.get('I0_max',None),\
+					vary = paramSugg.get('I0_vary',True))
+		params.add("bckg", value = paramSugg.get('bckg',0),\
+					min = paramSugg.get('bckg_min',None),\
+					max = paramSugg.get('bckg_max',None),\
+					vary = paramSugg.get('bckg_vary',False))
 
 		return params
 
-	def lmfit_fit(self, fitType, params, **kwargs):
-		"""lmfit_fit: fits the data to one of the model types. kwargs should contain 2
-		qRanges, a first one over which the fit is done over the wide qrange where the
-		values are normalized by 1/I. A second at low-q range for fitting the I0. If no
-		ranges are provided the whole q range will be used for the first fit and 10% of
-		range will be used for the second fit
+	def lmfit_fit(self, fitType, params, qRange = np.array[0,np.inf],\
+	 			RedqRange = None, plotFit = False, fit_kws = {}):
+		"""lmfit_fit: fits the data to one of the model types. kwargs should
+		contain 2 qRanges, a first one over which the fit is done over the wide
+		qrange where the values are normalized by 1/I. A second at low-q range
+		for fitting the I0. If no ranges are provided the whole q range will be
+		used for the first fit and 10% of range will be used for the second fit
 			Args:
-				fitType (string): the type of distribution used to fit the data
-				params (:obj: Parameters): The Parameter object from lmfit with all the
-					parameters provided.
-				**kwargs (dict): the set of parameters used for the fit.
-					qRange (list): the first range of q-values used for fitting with
-						weights = 1/I. Defaults to [0,np.inf]
-					RedqRange (list): The second range of q-values used for fitting the I0.
-						Defaults to [0,0.1*max(q)]
-					plotFit (bool): decides whether or not to plot the fitted data
-					fit_kws (dict): contains the dictionary to pass over to the scipy function
-						for the fit.
+				-fitType (string): the type of distribution used to fit the data
+				-params (:obj: Parameters): The Parameter object from lmfit with
+					all the parameters provided.
+				-qRange (list): the first range of q-values used for fitting with
+					weights = 1/I. Defaults to [0,np.inf]
+				-RedqRange (list): The second range of q-values used for fitting
+					the I0. Defaults to [0,0.1*max(q)].
+				-plotFit (bool): decides whether or not to plot the fitted data.
+					Defaults to False
+				- fit_kws (dict): contains the dictionary to pass over to the
+					scipy function for the fit. Defaults ot empty dictionary.
 		"""
 		if kwargs.get('verbose', False):
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
@@ -359,7 +403,7 @@ class SmallAngleScattering(ScatteringObject):
 		tempI = tempI.astype(np.float64)
 
 		#np.array([II.astype(np.float64) for II in tempI])
-		fit_kws = kwargs.get('fit_kws',{})
+		#fit_kws = kwargs.get('fit_kws',{})
 		if 'nan_policy' not in fit_kws:
 			fit_kws['nan_policy'] = 'omit'
 		if kwargs.get('verbose', False):
@@ -379,12 +423,11 @@ class SmallAngleScattering(ScatteringObject):
 				print '{}: {}'.format(k, result.params[k].value)
 		#Second fit done over the reduced range in order to correctly fit the
 		#intensity
-		RedqRange = kwargs.get('RedqRange',[0,0.1*max(self.q)])
+		if RedqRange is None:
+			RedqRange = np.array[0,0.1*max(self.q)]
 		mask = np.logical_and(self.q>min(RedqRange), self.q<max(RedqRange))
 		tempq = self.q[mask]
 		tempI = self.Iabs[mask]
-
-
 
 		#if "Schultz" in fitType:
 			#convFact = _UnitsConv['m']/_UnitsConv[self.qUnits]

@@ -30,13 +30,30 @@ class ScatteringObject(object):
 		"""Initialize all the necessary variables
 		the child classes will add extra variables
 		where they are needed.
-		fname: The complete name of the file (directory+filename)
+		fname: The complete name of the file (directory+filename). This can also
+			be a list of filenames, in case multiple images were taken for the
+			sample.
 		kwarg:
 			- qcol: the column of the q-values
 			- Icol: the column of the intensities
 			- skip_header: the number of header lines to skip
 			- delimiter: the delimiter used in the csv
-			- units: the units used in the file
+			- qUnits: the units for the wavevector used in the file
+			- IUnits: the units used for the intensity in the file
+			- DetDistance: the distance between the sample and detector
+			- Temp: the temperature of the sample
+			- Dt: the time elapsed since the beginning of the measurement
+			- Wavelength: the wavelength of the incident beam
+			- readHeader (dict): dictionary containing the information to read
+				the header in order to retrieve the information to store in
+				setup dictionary:
+				Elements:
+					- linePos (int): indicates which line to use for the header.
+						linePos has to be < skip_header. Defaults to 0
+					- delimiter (string): the delimiter used in the header.
+						Defaults to the delimiter used in the file
+					- field (dict): dictionary containing the name of the field
+						and its position
 		"""
 
 		"""
@@ -74,8 +91,8 @@ class ScatteringObject(object):
 		self.IbckgFrames = None
 		self.Ibckg = None
 		self.Idark = None
-		self.coeffBckg = None
-		self.coeffAbs = None
+		self._coeffBckg = 1
+		self._coeffAbs = 1
 		self.Inorm = None
 		self.Iabs = None
 		self.isAbs = False
@@ -98,38 +115,17 @@ class ScatteringObject(object):
 		if fname is not None:
 			#Create list of keywords required in create_from_file and use them to
 			#populate a dictionary to pass as argument
-			createKeywords = ['qcol','Icol', 'skip_header', 'delimiter', 'bckgFname', 'qUnits', 'IUnits', 'Errcol']
+			createKeywords = ['qcol','Icol', 'skip_header', 'delimiter', 'bckgFname',\
+			'qUnits', 'IUnits', 'Errcol', 'readHeader', 'verbose']
 			passArguments = {kw : kwargs[kw] for kw in createKeywords if kw in kwargs}
 			self.create_from_file(fname, **passArguments)
-
-	@property
-	def qUnits(self):
-		"""Stores the units in which the wavevector is expressed"""
-		return self._qUnits
-
-	@qUnits.setter
-	def qUnits(self, value):
-		if value in _AvlbUnits:
-			self._qUnits = value
-		else:
-			print '{} is not an available unit. Please select between the following units:'.format(value)
-			for un in _AvlbUnits:
-				print '-{}: {}'.format(un, _UnitsSymbols[un])
-
-	@property
-	def sampleName(self):
-		"""Stores the name of the sample"""
-		return self._sampleName
-
-	@sampleName.setter
-	def sampleName(self, value):
-		self._sampleName = value
-
 
 	def create_from_file(self, fname, **kwargs):
 		"""Reads the data from a file into the object.
 		Args:
-			fname (string): the complete path to the file which contains the scattering data
+			fname (string/stirng list): the complete path to the file which
+				contains the scattering data. The data can be either a string
+				or a list of strings.
 			qcol (int): the column which contains the q-wavevector. Defaults to 0
 			Icol (int): the column which contains the intensity vector. Defaults to 1
 			Errcol (int): the column which contains the estimated error. If
@@ -146,16 +142,20 @@ class ScatteringObject(object):
 					Defaults to 'nm'
 			bkcgFname (string): the filename containing the background intensity. If None
 				no background is imported. Defaults to None
-			ReadHeader (dict): dictionary containing the information ot read the header in
+			readHeader (dict): dictionary containing the information to read the header in
 				order to retrieve the information to store in Setup dictionary:
 
 				Elements:
 					linePos (int): indicates which line to use for the header. linePos has to
-						be <skip_header. Defaults to 1
+						be < skip_header. Defaults to 0
 					delimiter (string): the delimiter used in the header. Defaults to the delimiter
 						used in the file
 					field (dict): dictionary containing the name of the field and its position
 		"""
+		if kwargs.get('verbose', False):
+			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		else:
+			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 		#The values used to import the data are either read, or if not passed
 		#are set to their default value
 		qcol = kwargs.get('qcol', 0)
@@ -164,12 +164,23 @@ class ScatteringObject(object):
 		skip_header = kwargs.get('skip_header',2)
 		delimiter = kwargs.get('delimiter', None)
 		bckgFname = kwargs.get('bckgFname', None)
+		readHeader = kwargs.get('readHeader',None)
+		if ('linePos' not in readHeader) or ('delimiter' not in readHeader):
+			readHeader = None
 		#qunits = kwargs.get('qunits', None)
 		#Iunits = kwargs.get('Iunits', None)
+		#If fname is a string then only one file is read
 		if isinstance(fname, str):
 			temp = np.genfromtxt(fname,skip_header=skip_header, delimiter = delimiter)
 			self.q = temp[:, qcol]
 			self.Iraw = temp[:, Icol]
+			self.IFrames = temp[:,Icol]
+			if Errcol != -1:
+				self.Ierr = temp[:,Errcol]
+		'''
+		If fname is an iterable then it is supposed that each element is a
+		file and is loaded in Iframes.
+		'''
 		elif isinstance(fname, collections.Iterable):
 			temp = np.genfromtxt(fname[0],skip_header=skip_header, delimiter = delimiter)
 			self.q = temp[:, qcol]
@@ -177,14 +188,20 @@ class ScatteringObject(object):
 			for cc, fn in enumerate(fname):
 				self.Iframes[:,cc] = np.genfromtxt(fn,skip_header=skip_header, delimiter = delimiter, usecols = Icol)
 			self.Iraw = self.Iframes.mean(axis = 1)
-		#print 'Importing raw I:', self.Iraw
+			##TODO: Add the error in case of multi frames. In this case it
+			#should be either and "average" of the errors per frame or a std
+			#deviation between the different frames
+		'''
+		Inorm and Iabs are initiated as equal to the raw data in order for the
+		class to be usable in case the user does not intend to do any
+		normalisation on the data.
+		'''
 		self.Inorm = temp[:,Icol]
 		self.Iabs = temp[:,Icol]
-		if Errcol != -1:
-			self.Ierr = temp[:,Errcol]
 
-		#self.qUnits = 'nm'
-		#self.IUnits = 'm'
+		#This block should have been substituted by setting qUnits and IUnits
+		#as properties
+		'''
 		if kwargs.get('qUnits', None) is not None:
 			if kwargs.get('qUnits') in _AvlbUnits:
 				self.qUnits = kwargs.get('qUnits')
@@ -204,31 +221,42 @@ class ScatteringObject(object):
 				for au in _AvlbUnits:
 					print "\t - {}".format(au)
 				print r"I-Units are set to None"
+		'''
+		#Import the background if a file is provided
 		if bckgFname is not None:
 			if isinstance(bckgFname, str):
 				temp = np.genfromtxt(bckgFname,skip_header=skip_header, delimiter = delimiter)
-				#temp = temp[:,Icol]
 				if len(temp[:,0]) == len(self.q):
 					self.Ibckg = temp[:,Icol]
 					#print 'Importing bck: ', self.Ibckg
 					if Errcol != -1:
 						self.IbckgErr = temp[:,Errcol]
 				else:
-					print r"Size mismatch: the Bckg vector must have the same size as the I \n \
-				 	vector, the background was not imported."
+					logging.error("Size mismatch: the Bckg vector must have the same size as the I vector, the background was not imported.")
+
 			elif isinstance(bckgFname, collections.Iterable):
 				temp = np.genfromtxt(bckgFname[0],skip_header=skip_header, delimiter = delimiter)
 				if len(temp[:,0]) == len(self.q):
 					self.IbckgFrames = np.empty( (len(self.q), len(bckgFname)) )
 					for cc, fn in enumerate(bckgFname):
 						self.IbckgFrames[:,cc] = np.genfromtxt(fn,skip_header=skip_header, delimiter = delimiter, usecols = Icol)
-				self.Ibckg = self.IbckgFrames.mean(axis = 1)
+					self.Ibckg = self.IbckgFrames.mean(axis = 1)
+				else:
+					logging.error("Size mismatch: the Bckg vector must have the same size as the I vector, the background was not imported.")
+					self.Ibckg = np.zeros(self.Iraw.shape)
+					self.coeffBckg = 1
+
 		else:
 			self.Ibckg = np.zeros(self.Iraw.shape)
 			self.coeffBckg = 1
 
-		if "ReadHeader" in kwargs:
-			print "Header interpretation not implemented yet"
+		if readHeader is not None:
+			if isinstance(fname, str):
+				temp = np.genfromtxt(fname, use_rows = readHeader.pop('linePos'), delimiter = readHeader.pop('delimiter'))
+			elif isinstance(fname, collections.Iterable):
+				temp = np.genfromtxt(fname[0], use_rows = readHeader.pop('linePos'), delimiter = readHeader.pop('delimiter'))
+			for kword in readHeader:
+				self._setup[kword] = readHeader[kword]
 
 	def create_from_data(self, q, I, Ibckg = None, qunits = 'nm', Iunits = 'm'):
 		"""Sets data by passing both the q values and the intesity
@@ -271,12 +299,13 @@ class ScatteringObject(object):
 				for unt in AvlbUnits:
 					print r"\t - ", unt
 
-	def find_bckg_scale(self, qRange = [0,np.inf], applyNorm = False, plot=False, ax = None):
+	def find_bckg_scale(self, qRange = [0,np.inf], applyNorm = False, plot=False,\
+	 					ax = None, verbose = False):
 		"""Compares the raw intensity to the background within the
 		qRange specified. It finds the best coefficient by which to multiply the
 		background so as to minimize the difference between the two. If the lmfit module
 		is present it does it using the lmfit functions, if not by using a simple average.
-		if apply is set to True then the coefficient will be stored and the Inorm will
+		If apply is set to True then the coefficient will be stored and the Inorm will
 		be updated. If plot is selected then it will plot the raw data and the corrected
 		background.
 			Args:
@@ -288,9 +317,15 @@ class ScatteringObject(object):
 				plot (bool): tells whether the beckground normaliztion should be plotted. Defaults
 					to False
 		"""
-		tempq = self.q[np.logical_and(self.q>min(qRange), self.q<max(qRange))]
-		tempI = self.Iraw[np.logical_and(self.q>min(qRange), self.q<max(qRange))]
-		tempb = self.Ibckg[np.logical_and(self.q>min(qRange), self.q<max(qRange))]
+		if kwargs.get('verbose', False):
+			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		else:
+			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
+		mask = np.logical_and(self.q>min(qRange), self.q<max(qRange))
+		tempq = self.q[mask]
+		tempI = self.Iraw[mask]
+		tempb = self.Ibckg[mask]
 
 		if lmfitAvlb:
 			p = lmfit.Parameters()
@@ -301,7 +336,9 @@ class ScatteringObject(object):
 			coeff = np.mean(tempI/tempb)
 
 		print "The normalizing coefficient for the background is: {}".format(coeff)
+
 		if applyNorm:
+			logging.info('The value of the background coeff was automatically updated')
 			self.coeffBckg = coeff
 			self.Inorm = self.Iraw-self.coeffBckg*self.Ibckg
 			if self.IbckgErr is not None:
@@ -328,7 +365,7 @@ class ScatteringObject(object):
 					changed here. Defaults to None
 				bckgCoeff (int): the coefficient by which to multiply the background
 					for a correct subtraction. It can be set or changed from here.
-					Defgaults to None
+					Defaults to None
 		"""
 		#if self.Ibckg is None:
 			#print "Cannot calculate the signal at absolute scale without a background"
@@ -338,18 +375,18 @@ class ScatteringObject(object):
 			self.setup['Thickness'] = thickness
 		if bckgCoeff is not None:
 			self.coeffBckg = bckgCoeff
-			self.Inorm = self.Iraw-self.coeffBckg*self.Ibckg
-			if self.IbckgErr is not None:
-				self.IbckgErr = self.IbckgErr*self.coeffBckg
+			#self.Inorm = self.Iraw-self.coeffBckg*self.Ibckg
+			#if self.IbckgErr is not None:
+				#self.IbckgErr = self.IbckgErr*self.coeffBckg
 
 		if self.setup['Thickness'] is None:
 			print "Cannot calculate the signal at absolute scale without the sample's thickness"
 			return 0
-		if self.coeffBckg is None:
-			print "Cannot calculate the signal at absolute scale without the background"
-			return 0
+		#if self.coeffBckg is None:
+			#print "Cannot calculate the signal at absolute scale without the background"
+			#return 0
 		self.coeffAbs = absCoeff
-		self.Iabs = (self.Iraw-self.coeffBckg*self.Ibckg)*self.setup['Thickness']*self.coeffAbs
+		#self.Iabs = (self.Iraw-self.coeffBckg*self.Ibckg)*self.setup['Thickness']*self.coeffAbs
 		if self.Ierr is not None:
 			self.Ierr =self.Ierr*self.setup['Thickness']*self.coeffAbs
 		if self.IbckgErr is not None:
@@ -403,12 +440,13 @@ class ScatteringObject(object):
 	DEFINITION OF ALL THE PROPERTIES OF THE CLASS
 	'''
 
+	###UNITS USED FOR THE INTENSITY###
 	@property
 	def IUnits(self):
 		"""Stores the units in which the intensity is expressed"""
 		return self._IUnits
 
-	@qUnits.setter
+	@IUnits.setter
 	def IUnits(self, value):
 		if value in _AvlbUnits:
 			self._IUnits = value
@@ -417,6 +455,32 @@ class ScatteringObject(object):
 			for un in _AvlbUnits:
 				print '-{}: {}'.format(un, _UnitsSymbols[un])
 
+	###UNITS USED FOR THE WAVEVECTOR###
+	@property
+	def qUnits(self):
+		"""Stores the units in which the wavevector is expressed"""
+		return self._qUnits
+
+	@qUnits.setter
+	def qUnits(self, value):
+		if value in _AvlbUnits:
+			self._qUnits = value
+		else:
+			print '{} is not an available unit. Please select between the following units:'.format(value)
+			for un in _AvlbUnits:
+				print '-{}: {}'.format(un, _UnitsSymbols[un])
+
+	###NAME USED FOR THE SAMPLE###
+	@property
+	def sampleName(self):
+		"""Stores the name of the sample"""
+		return self._sampleName
+
+	@sampleName.setter
+	def sampleName(self, value):
+		self._sampleName = value
+
+	###DETAILS REGARDING THE EXPERIMENTAL SETUP###
 	@property
 	def setup(self):
 		"""Stores the details of the experimental setup (eg. Detector distance, wavelength, etc.)"""
@@ -424,8 +488,10 @@ class ScatteringObject(object):
 
 	@setup.setter
 	def setup(self, value):
+		#Should check whether this is a dictionary (probably done by update)
 		self._setup.update(value)
 
+	###DETAILS FOR PLOTTING THE DATA###
 	@property
 	def plot_dict(self):
 		"""Stores the options for plotting the data using matplotlib"""
@@ -435,6 +501,7 @@ class ScatteringObject(object):
 	def plot_dict(self, value):
 		self._plot_dict.update(value)
 
+	###DETAILS FOR PLOTTING THE FIT###
 	@property
 	def fit_plot_dict(self):
 		"""Stores the options for plotting the fit using matplotlib"""
@@ -443,3 +510,47 @@ class ScatteringObject(object):
 	@plot_dict.setter
 	def fit_plot_dict(self, value):
 		self._fit_plot_dict.update(value)
+
+	###COEFFICIENT FOR THE NORMALISATION OF THE BACKGROUND###
+	@property
+	def coeffBckg(self):
+		"""Stores coefficient used to subtract the background"""
+		return self._coeffBckg
+
+	@coeffBack.setter
+	def coeffBck(self, value):
+		self._coeffBckg = value
+		self.Inorm = self.Iraw - self.coeffBckg*self.Ibckg
+		self.Iabs = self.coeffAbs*self.Inorm
+		if self.IbckgErr is not None:
+			self.IbckgErr = self.IbckgErr*coeff
+
+	###COEFFICIENT FOR THE ABSOLUTE VALUE OF THE SIGNAL###
+	@property
+	def coeffAbs(self):
+		"""Stores coefficient used to obtain the intensity in absolute value"""
+		return self._coeffAbs
+
+	@coeffAbs.setter
+	def coeffAbs(self, value):
+		self._coeffAbs = value
+		self.Iabs = (self.Iraw-self.coeffBckg*self.Ibckg)*self.setup['Thickness']*self.coeffAbs
+		if self.Ierr is not None:
+			self.Ierr =self.Ierr*self.setup['Thickness']*self.coeffAbs
+		if self.IbckgErr is not None:
+			self.IbckgErr =self.IbckgErr*self.setup['Thickness']*self.coeffAbs
+
+	###THICKNESS OF THE SAMPLE###
+	@property
+	def thickness(self):
+		"""Stores the thickness ofthe sample"""
+		return self._setup['Thickness']
+
+	@thickness.setter
+	def thickness(self, value):
+		self._setup['Thickness'] = value
+		self.Iabs = (self.Iraw-self._coeffBckg*self.Ibckg)*self._setup['Thickness']*self._coeffAbs
+		if self.Ierr is not None:
+			self.Ierr =self.Ierr*self.setup['Thickness']*self.coeffAbs
+		if self.IbckgErr is not None:
+			self.IbckgErr =self.IbckgErr*self.setup['Thickness']*self.coeffAbs
