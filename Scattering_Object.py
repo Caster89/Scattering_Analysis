@@ -111,6 +111,8 @@ class ScatteringObject(object):
 		self._fit_plot_dict = {'color' : 'k', 'linestyle' : 'None', 'linewidth' : 2, 'marker' : 'o', 'ms' : 4,\
 						  'mec' : 'None', 'fit_color' : 'r', 'fit_linestyle' : '-', 'fit_linewidth' : 2, \
 						  'fit_marker' : 'None', 'fit_ms' : 2, 'fit_mec' : 'None'}
+		print self.fit_plot_dict
+		print self._fit_plot_dict
 		self._sampleName = kwargs.get('SampleName', None)
 		if fname is not None:
 			#Create list of keywords required in create_from_file and use them to
@@ -164,7 +166,7 @@ class ScatteringObject(object):
 		skip_header = kwargs.get('skip_header',2)
 		delimiter = kwargs.get('delimiter', None)
 		bckgFname = kwargs.get('bckgFname', None)
-		readHeader = kwargs.get('readHeader',None)
+		readHeader = kwargs.get('readHeader',{})
 		if ('linePos' not in readHeader) or ('delimiter' not in readHeader):
 			readHeader = None
 		#qunits = kwargs.get('qunits', None)
@@ -177,11 +179,12 @@ class ScatteringObject(object):
 			self.IFrames = temp[:,Icol]
 			if Errcol != -1:
 				self.Ierr = temp[:,Errcol]
-		'''
-		If fname is an iterable then it is supposed that each element is a
-		file and is loaded in Iframes.
-		'''
+
 		elif isinstance(fname, collections.Iterable):
+			'''
+			If fname is an iterable then it is supposed that each element is a
+			file and is loaded in Iframes.
+			'''
 			temp = np.genfromtxt(fname[0],skip_header=skip_header, delimiter = delimiter)
 			self.q = temp[:, qcol]
 			self.Iframes = np.empty( (len(self.q), len(fname)) )
@@ -317,7 +320,7 @@ class ScatteringObject(object):
 				plot (bool): tells whether the beckground normaliztion should be plotted. Defaults
 					to False
 		"""
-		if kwargs.get('verbose', False):
+		if verbose is False:
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 		else:
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
@@ -507,7 +510,7 @@ class ScatteringObject(object):
 		"""Stores the options for plotting the fit using matplotlib"""
 		return self._fit_plot_dict
 
-	@plot_dict.setter
+	@fit_plot_dict.setter
 	def fit_plot_dict(self, value):
 		self._fit_plot_dict.update(value)
 
@@ -517,13 +520,13 @@ class ScatteringObject(object):
 		"""Stores coefficient used to subtract the background"""
 		return self._coeffBckg
 
-	@coeffBack.setter
-	def coeffBck(self, value):
+	@coeffBckg.setter
+	def coeffBckg(self, value):
 		self._coeffBckg = value
 		self.Inorm = self.Iraw - self.coeffBckg*self.Ibckg
 		self.Iabs = self.coeffAbs*self.Inorm
 		if self.IbckgErr is not None:
-			self.IbckgErr = self.IbckgErr*coeff
+			self.IbckgErr = self.IbckgErr*self.coeffBckg
 
 	###COEFFICIENT FOR THE ABSOLUTE VALUE OF THE SIGNAL###
 	@property

@@ -327,6 +327,7 @@ def guess_from_dist(xs,ys,fitType = None, goodness = False, max_mode = 'wrap', v
     maxIdx = maxIdx[maxIdxOrd]
     if verbose:
         print 'Fitting_Models:guess_from_dist(): The indixes of the maxima found are: {}'.format(maxIdx)
+        print 'Fitting_Models:guess_from_dist(): Corresponding to radii of: {}'.format(xs[maxIdx])
         print 'Fitting_Models:guess_from_dist(): The maxima intensities are: {}'.format(ys[maxIdx])
 
     if fitType is None:

@@ -58,9 +58,9 @@ class SmallAngleScattering(ScatteringObject):
 
 		super(SmallAngleScattering, self).__init__(fname, **kwargs)
 
-	def plot_data(self, qRange=[0,np.inf],yShift=1, ax = None, figSize = (6,6),\
+	def plot_data(self, qRange=[0,np.inf],yShift=1, ax = None, fig = None, figSize = (6,6),\
 	 			  xUnits = None, yUnits =None, plot_dic={}, axLabelSize = 20,\
-				  labelSize = 18, tickSize = 6, tickWidth = 3):
+				  labelSize = 18, tickSize = 6, tickWidth = 3, **kwargs):
 		"""plot_data: Plots the data in a log-log plot. If the axis is passed
 		then the data is plotted on the given axis, if not a figure of size
 		figSize is created and the axis places in it. The units on the x and y
@@ -75,6 +75,7 @@ class SmallAngleScattering(ScatteringObject):
 					it is plotted in loglog. Defaults to 1
 				-ax (:obj: plt.axes): the axis on which to plot the data. If it
 					is not provided then one will be created. Defaults to None
+				-fig (:obj:plt.figure): the figure in which the axis is placed
 				-figSize (tuple): used to set the size of the figure in case the
 					axis is not provided. Defaults to (6,6)
 				-xUnits (string): the units used on the x-axis. They have to be
@@ -113,6 +114,9 @@ class SmallAngleScattering(ScatteringObject):
 		if ax is None:
 			fig = Figure(figsize = figSize)
 			ax = fig.add_subplot(111)
+		else:
+			if fig is None:
+				fig = ax.get_figure()
 		mask = np.logical_and(self.q>min(qRange), self.q<max(qRange))
 		tempq = self.q[mask]
 		tempI = self.Iabs[mask]
@@ -239,7 +243,7 @@ class SmallAngleScattering(ScatteringObject):
 		#package, it is in fact available
 		if fitType in _lmfitModels:
 			if not lmfitAvlb:
-				logging.error()"Impossible to fit using {} model because lmfit was not importent.".format(fitType))
+				logging.error("Impossible to fit using {} model because lmfit was not importent.".format(fitType))
 				return 0
 
 			params = self.create_params(fitType, kwargs.get('paramSugg', {}))
@@ -353,8 +357,8 @@ class SmallAngleScattering(ScatteringObject):
 
 		return params
 
-	def lmfit_fit(self, fitType, params, qRange = np.array[0,np.inf],\
-	 			RedqRange = None, plotFit = False, fit_kws = {}):
+	def lmfit_fit(self, fitType, params, qRange = np.array([0,np.inf]),\
+	 			RedqRange = None, plotFit = False, fit_kws = {}, **kwargs):
 		"""lmfit_fit: fits the data to one of the model types. kwargs should
 		contain 2 qRanges, a first one over which the fit is done over the wide
 		qrange where the values are normalized by 1/I. A second at low-q range
@@ -382,7 +386,7 @@ class SmallAngleScattering(ScatteringObject):
 							independent_variables = ['q'])
 
 		#Initial fit over the wider qRange
-		qRange = kwargs.get('qRange',np.array([0,np.inf]) )
+		#qRange = kwargs.get('qRange',np.array([0,np.inf]) )
 		mask = np.logical_and(self.q>min(qRange), self.q<max(qRange))
 		tempq = self.q[mask]
 		tempI = self.Iabs[mask]
@@ -411,7 +415,8 @@ class SmallAngleScattering(ScatteringObject):
 			for k in params:
 				print '{}: {}'.format(k, params[k].value)
 
-		result = model.fit(tempI, params, q=tempq, weights = 1./tempI, fit_kws = fit_kws)
+
+		result = model.fit(tempI, params = params, q=tempq, weights = 1./tempI, fit_kws = fit_kws)
 		logging.debug('_____________FIRST FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
 																																									   result.message,\
 																																									   result.ier,\
@@ -424,7 +429,7 @@ class SmallAngleScattering(ScatteringObject):
 		#Second fit done over the reduced range in order to correctly fit the
 		#intensity
 		if RedqRange is None:
-			RedqRange = np.array[0,0.1*max(self.q)]
+			RedqRange = np.array([0,0.1*max(self.q)])
 		mask = np.logical_and(self.q>min(RedqRange), self.q<max(RedqRange))
 		tempq = self.q[mask]
 		tempI = self.Iabs[mask]
@@ -457,11 +462,12 @@ class SmallAngleScattering(ScatteringObject):
 		self.fitResults[fitType]['I0'] = resultI.params['I0'].value
 		self.fitResults[fitType].update({'{}_stderr'.format(p):result.params[p].stderr for p in result.params})
 		self.fitResults[fitType]['I0_stderr'] = resultI.params['I0'].stderr
-		self.fitResults[fitType]['qRange'] = kwargs.get('qRange',[0,np.inf])
+		self.fitResults[fitType]['qRange'] = qRange
 		self.fitResults[fitType]['redchi'] = result.redchi
 		self.fitResults[fitType]['chi'] = result.chisqr
 		self.fitResults[fitType]['residual'] = result.residual
 		self.fitResults[fitType]['Units'] = self.qUnits
+		print 'The data for {} fit was updated to:\n{}'.format(fitType,self.fitResults[fitType])
 
 		if kwargs.get('plotFit',False):
 			self.plot_fit(fitType)
@@ -558,6 +564,7 @@ class SmallAngleScattering(ScatteringObject):
 		maxIdxOrd = (-maxValues).argsort()[:numbPeaks]
 		maxIdx = maxIdx[maxIdxOrd]
 		logging.debug('SAS.lmfit_from_em(): The indixes of the maxima found are: {}'.format(maxIdx))
+		logging.debug('SAS.lmfit_from_em(): These correspond to radii of: {}'.format(Rvec(maxIdx)))
 		logging.debug('SAS.lmfit_from_em(): The maxima intensities are: {}'.format(xk[maxIdx]))
 
 		if numbPeaks == 0:
@@ -598,9 +605,9 @@ class SmallAngleScattering(ScatteringObject):
 
 			print 'The paramSugg before are: ',paramSugg
 			if 'Schultz' in forced_model:
-				self.fit_data(fitType = 'Double_Schultz', qRange = qRange, paramSugg=paramSugg,verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
+				self.fit_data(fitType = 'Double_Schultz', qRange = qRange, paramSugg=paramSugg, verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
 			else:
-				self.fit_data(fitType = 'Double_Gauss', qRange = qRange, paramSugg=paramSugg,verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
+				self.fit_data(fitType = 'Double_Gauss', qRange = qRange, paramSugg=paramSugg, verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
 			#print 'The fitted parameters are: ',self.fitResults['Double_Gauss']
 
 	def plot_fit(self, fitType, ax = None, fig = None, yshift = 0, plotDistribution = True,\
@@ -733,9 +740,9 @@ class SmallAngleScattering(ScatteringObject):
 						marker = self.fit_plot_dict['marker'], ms = self.fit_plot_dict['ms'],\
 						markeredgecolor = self.fit_plot_dict['mec'])
 
-		#The two Schultz distributions require particular attention as they had to be
-		#scaled to m in order to correctly fit.
-		tempq = self.q[np.logical_and(self.q>min(RedqRange), self.q<max(RedqRange))]
+		print 'THe reduced q range {}'.format(RedqRange)
+		mask = np.logical_and(self.q>min(RedqRange), self.q<max(RedqRange))
+		tempq = self.q[mask]
 
 		if plotDistribution:
 			#If the radii range in which to plot the distribution is not given it has to be calculated.
