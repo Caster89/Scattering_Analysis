@@ -9,7 +9,10 @@ import logging
 import matplotlib
 matplotlib.use("Qt5Agg")
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.ticker import ScalarFormatter
 from matplotlib.figure import Figure
+from matplotlib import rc
+rc('text', usetex=True)
 import scipy as sp
 from scipy import signal
 from scipy import interpolate
@@ -158,6 +161,7 @@ class SmallAngleScattering(ScatteringObject):
 						#markeredgecolor = kwargs.get('color','k'), ms = kwargs.get('ms',2))
 
 		#Set the x an y limits
+		#yLimits = [min(tempI[np.isfinite(tempI)]*IConvCoeff*yShift),max(tempI[np.isfinite(tempI)]*IConvCoeff*yShift)]
 		ax.set_ylim(min(tempI[np.isfinite(tempI)]*IConvCoeff*yShift),max(tempI[np.isfinite(tempI)]*IConvCoeff*yShift))
 		ax.set_xlim(min(tempq[np.isfinite(tempI)]*qConvCoeff),max(tempq[np.isfinite(tempI)]*qConvCoeff))
 
@@ -172,6 +176,8 @@ class SmallAngleScattering(ScatteringObject):
 			ax.set_ylabel(r'Intensity', fontsize = axLabelSize)
 		ax.tick_params(labelsize = labelSize, size = tickSize,
 		 				width = tickWidth)
+		#Format The Scientific notation
+		#ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='y')
 		#implement a method to place the major and minor tick marks
 		return (ax, fig)
 
@@ -467,7 +473,7 @@ class SmallAngleScattering(ScatteringObject):
 		self.fitResults[fitType]['chi'] = result.chisqr
 		self.fitResults[fitType]['residual'] = result.residual
 		self.fitResults[fitType]['Units'] = self.qUnits
-		print 'The data for {} fit was updated to:\n{}'.format(fitType,self.fitResults[fitType])
+		#print 'The data for {} fit was updated to:\n{}'.format(fitType,self.fitResults[fitType])
 
 		if kwargs.get('plotFit',False):
 			self.plot_fit(fitType)
@@ -544,10 +550,10 @@ class SmallAngleScattering(ScatteringObject):
 		Rvec = self.fitResults['EM']['Rvec']
 		if fromVolume:
 			xk = self.fitResults['EM']['volDist']
-			print 'Using volDist'
+			#print 'Using volDist'
 		else:
 			xk = self.fitResults['EM']['numbDist'].flatten()
-			print 'Using number dist'
+			#print 'Using number dist'
 		paramSugg, fitType, redchi = Fitting_Models.guess_from_dist(Rvec,xk,fitType = forced_model, verbose = kwargs.get('verbose', False), goodness = True)
 		#print 'The guess_from_dist returned a fit of type {} with params:\n {}'.format(fitType,paramSugg)
 		self.fit_data(fitType = fitType, qRange = qRange, paramSugg=paramSugg,verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
@@ -603,7 +609,7 @@ class SmallAngleScattering(ScatteringObject):
 			logging.debug('Performing Double Gaussian Fit')
 			paramSugg.update({'R1_av':maxPos[0],'R2_av':maxPos[1]})
 
-			print 'The paramSugg before are: ',paramSugg
+			#print 'The paramSugg before are: ',paramSugg
 			if 'Schultz' in forced_model:
 				self.fit_data(fitType = 'Double_Schultz', qRange = qRange, paramSugg=paramSugg, verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
 			else:
@@ -636,10 +642,10 @@ class SmallAngleScattering(ScatteringObject):
 
 		"""
 		if kwargs.get('verbose', False):
-			print 'logging set to debug'
+			#print 'logging set to debug'
 			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.DEBUG)
 		else:
-			print 'logging set to info'
+			#print 'logging set to info'
 			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.INFO)
 
 		qConvFact = 1
@@ -704,6 +710,13 @@ class SmallAngleScattering(ScatteringObject):
 
 		ax[0].tick_params(labelsize = kwargs.get('labelSize',18),size = kwargs.get('tickSize',6),
 		 				width = kwargs.get('tickWidth',3) )
+
+
+		#ax[0].ticklabel_format(style='sci',scilimits=(-2,2),axis='both')
+		yFrmt = ScalarFormatter()
+		yFrmt.set_powerlimits((-2,2))
+		yFrmt.set_scientific(True)
+		ax[1].yaxis.set_major_formatter(yFrmt)
 		if plotDistribution:
 			ax[1].set_ylabel('Number Distribution', fontsize = kwargs.get('lableSize',20))
 			if qUnits in _AvlbUnits:
@@ -740,7 +753,7 @@ class SmallAngleScattering(ScatteringObject):
 						marker = self.fit_plot_dict['marker'], ms = self.fit_plot_dict['ms'],\
 						markeredgecolor = self.fit_plot_dict['mec'])
 
-		print 'THe reduced q range {}'.format(RedqRange)
+		#print 'THe reduced q range {}'.format(RedqRange)
 		mask = np.logical_and(self.q>min(RedqRange), self.q<max(RedqRange))
 		tempq = self.q[mask]
 
@@ -918,10 +931,10 @@ class SmallAngleScattering(ScatteringObject):
 				Numpy.array with the two values in increasing order
 		"""
 		if verbose:
-			print 'logging set to debug'
+			#print 'logging set to debug'
 			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.DEBUG)
 		else:
-			print 'logging set to info'
+			#print 'logging set to info'
 			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.INFO)
 
 		if fitType in _lmfitModels:

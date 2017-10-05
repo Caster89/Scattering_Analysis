@@ -111,8 +111,7 @@ class ScatteringObject(object):
 		self._fit_plot_dict = {'color' : 'k', 'linestyle' : 'None', 'linewidth' : 2, 'marker' : 'o', 'ms' : 4,\
 						  'mec' : 'None', 'fit_color' : 'r', 'fit_linestyle' : '-', 'fit_linewidth' : 2, \
 						  'fit_marker' : 'None', 'fit_ms' : 2, 'fit_mec' : 'None'}
-		print self.fit_plot_dict
-		print self._fit_plot_dict
+		
 		self._sampleName = kwargs.get('SampleName', None)
 		if fname is not None:
 			#Create list of keywords required in create_from_file and use them to

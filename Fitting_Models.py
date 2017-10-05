@@ -128,8 +128,8 @@ def single_schultz_spheres(q, R_av = 1, Z = 50, I0 = 1, bckg = 0 ):
         G1 = G11+G12-G13
         returnVal = 10**I0*p1*G1+bckg
     returnVal = np.array(returnVal.astype(np.float64))
-    print 'Single_schultz calculated with:\nR_av:{} Z:{} I0:{}'.format(R_av, Z, I0)
-    print 'length is:{}, of which nan: {}'.format(len(returnVal), np.sum(np.isnan(returnVal)))
+    #print 'Single_schultz calculated with:\nR_av:{} Z:{} I0:{}'.format(R_av, Z, I0)
+    #print 'length is:{}, of which nan: {}'.format(len(returnVal), np.sum(np.isnan(returnVal)))
     return returnVal
 
 
@@ -409,7 +409,7 @@ def guess_from_dist(xs,ys,fitType = None, goodness = False, max_mode = 'wrap', v
     if verbose:
         print 'Starting parameters:\n{}'.format(params.valuesdict())
     result = model.fit(ys, params = params, x = xs, fit_kws = {'nan_policy' : 'omit'})
-    print 'guess from dist with dist {} found:\n{}'.format(fitType,result.params.valuesdict())
+    #print 'guess from dist with dist {} found:\n{}'.format(fitType,result.params.valuesdict())
     if goodness:
         return [result.params.valuesdict(), fitType, result.redchi]
     else:
