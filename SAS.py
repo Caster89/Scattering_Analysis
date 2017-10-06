@@ -380,7 +380,7 @@ class SmallAngleScattering(ScatteringObject):
 					the I0. Defaults to [0,0.1*max(q)].
 				-plotFit (bool): decides whether or not to plot the fitted data.
 					Defaults to False
-				- fit_kws (dict): contains the dictionary to pass over to the
+				-fit_kws (dict): contains the dictionary to pass over to the
 					scipy function for the fit. Defaults ot empty dictionary.
 		"""
 		if kwargs.get('verbose', False):
@@ -478,12 +478,28 @@ class SmallAngleScattering(ScatteringObject):
 		if kwargs.get('plotFit',False):
 			self.plot_fit(fitType)
 
-	def em_fit(self, qRange = np.array([0,np.inf]), **kwargs):
+	def em_fit(self, qRange = np.array([0,np.inf]),Rmin = 0.1, Rmax = 0, numbElements = 100,
+	 	eps = 1e-2, k= 3, maxIter = 10000, **kwargs):
 		'''em_fit performs a recursive fit of the the SAS data using the algorithm
 		 taken from DOI: 10.1137/15M1024354.
 		 	Args:
-				qRange (np.array): The extremes between which to fit the data.
+				-qRange (np.array): The extremes between which to fit the data.
 					Defaults to [0,np.inf]
+				-Rmin (float): The smallest radius to consider for the fit. The
+					units are those used for q.	Defaults to 0.1
+				-Rmax (float): The largest radius to use for the fit. If set to 0
+					the radius will be calculated based on the smallest q-value
+					available. Defaults to 0
+				-numbElements (int): the number of elements in the redius vector.
+					a larger number will result in a higher precision, btu also
+					in longer calculation times and possible artifacts arising.
+					Defaults to 100
+				-eps (float): one of the two parameters defined in the paper to
+					avoid overfitting the data. Defaults to 1e-2
+				-k (int): second parameter defined in the paper to avoid
+					overfitting the data. Defaults to 3
+				-maxIter (int): maximum number of iterations to do before stopping
+					the algorithm even if the convergence was not achieved.
 
 		'''
 		if kwargs.get('verbose', False):
@@ -502,10 +518,9 @@ class SmallAngleScattering(ScatteringObject):
 		tempq = self.q[mask]
 		tempI = self.Iabs[mask]
 		logging.debug('After applying qRange the number of points is : '.format(len(tempq)))
-		xk, Rvec, H = EM.expected_maximization_method(tempq, tempI, Rmin = kwargs.get('Rmin',0.1),\
-							Rmax = kwargs.get('Rmax',0), eps = kwargs.get('eps', 1e-2),\
-							k=kwargs.get('k',3), numbElements=kwargs.get('numbElements',100),\
-							maxIter = kwargs.get('maxIter',10000), verbose = kwargs.get('verbose',False))
+		xk, Rvec, H = EM.expected_maximization_method(tempq, tempI, Rmin = Rmin,\
+							Rmax = Rmax, eps = eps, k = k, numbElements =n umbElements,\
+							maxIter = maxIter, verbose = kwargs.get('verbose',False))
 
 		xk = xk.flatten()
 		Volume = np.array(4./3.*Rvec**3*np.pi)
@@ -523,11 +538,14 @@ class SmallAngleScattering(ScatteringObject):
 		looks for at most 2 peaks and uses gaussian distributions. Implemetation for the Schultz
 		distribution still have to be made
 			Args:
-				forced_model (String): model imposed (single or double, Gauss or
+				-forced_model (String): model imposed (single or double, Gauss or
 					Schultz). If None the best model based on the number of peaks
 					founf. Defaults to None
-				qRange (np.ndarray): Range over which the fit should be done.
+				-qRange (np.ndarray): Range over which the fit should be done.
 					Defaults to [0,np.inf]
+				-fromVolume (bool): If True the fitted distribution will be the
+					volume distribution, if False the number distribution will
+					be used. Default is False.
 				kwargs (dict):
 					order (int): parameter to find the maxima defined as:
 						'How many points on each side to use for the comparison to consider'
@@ -535,12 +553,10 @@ class SmallAngleScattering(ScatteringObject):
 					max_mod(String): tells argrelmax whether the data extremes should be considered
 						as maxima ('wrap') or not ('clip') defaults to 'wrap'
 		'''
-		print kwargs.get('verbose', False)
 		if kwargs.get('verbose', False):
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=10)
 		else:
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-		#print 'Logger level: ',logging.getLogger().getEffectiveLevel()
 		#qRange = kwargs.get('qRange',np.array([0,np.inf]) )
 
 		if self.fitResults['EM'] is None:
@@ -550,71 +566,12 @@ class SmallAngleScattering(ScatteringObject):
 		Rvec = self.fitResults['EM']['Rvec']
 		if fromVolume:
 			xk = self.fitResults['EM']['volDist']
-			#print 'Using volDist'
 		else:
 			xk = self.fitResults['EM']['numbDist'].flatten()
-			#print 'Using number dist'
 		paramSugg, fitType, redchi = Fitting_Models.guess_from_dist(Rvec,xk,fitType = forced_model, verbose = kwargs.get('verbose', False), goodness = True)
-		#print 'The guess_from_dist returned a fit of type {} with params:\n {}'.format(fitType,paramSugg)
 		self.fit_data(fitType = fitType, qRange = qRange, paramSugg=paramSugg,verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
+
 		return 0
-
-		maxIdx = sp.signal.argrelextrema(xk, np.greater, order = kwargs.get('order',3),\
-			mode = kwargs.get('max_mode','wrap') )[0]
-
-		#THe indexes are ordered based on the intensity of the peak
-		#maxIdx = np.array(sp.signal.find_peaks_cwt(xk,np.arange(1,10)))
-		numbPeaks = len(maxIdx)
-
-		maxValues = xk[maxIdx]
-		maxIdxOrd = (-maxValues).argsort()[:numbPeaks]
-		maxIdx = maxIdx[maxIdxOrd]
-		logging.debug('SAS.lmfit_from_em(): The indixes of the maxima found are: {}'.format(maxIdx))
-		logging.debug('SAS.lmfit_from_em(): These correspond to radii of: {}'.format(Rvec(maxIdx)))
-		logging.debug('SAS.lmfit_from_em(): The maxima intensities are: {}'.format(xk[maxIdx]))
-
-		if numbPeaks == 0:
-			if (forced_model is '') or ('Sing' in forced_model):
-				maxIdx = np.array([5])
-			elif ('Double' in forced_model):
-				maxIdx = np.array([5,5])
-		elif numbPeaks == 1:
-			maxIdx = np.array([maxIdx[0]])
-			if 'Double' in forced_model:
-				maxIdx = np.array([maxIdx, maxIdx])
-		elif numbPeaks > 1:
-			if 'Sing' in forced_model:
-				maxIdx = np.array([maxIdx[0]])
-			else:
-				maxIdx = np.array(maxIdx[:2])
-
-		logging.debug('SAS.lmfit_from_em():After manipulation the maxima indexes are:{}'.format(maxIdx))
-		maxValues = np.array([xk[maxIdx]]).flatten()
-
-		logging.debug('SAS.lmfit_from_em(): The peaks intensities array is of type: {} with values: {}'.format(type(maxValues),maxValues))
-		maxPos = np.array([Rvec[maxIdx]]).flatten()
-		logging.debug('SAS.lmfit_from_em(): The maxima array is of type: {}\nwith radius values: {}'.format(type(maxPos),maxPos))
-		#logging.info('The maxima considered are: {}'.format(maxPos))
-
-		paramSugg = kwargs.get('paramSugg',{})
-		if len(maxValues) == 1:
-			logging.debug('Performing Single Gaussian Fit')
-			paramSugg.update({'R_av':maxPos[0]})
-			if 'Schultz' in forced_model:
-				self.fit_data(fitType = 'Sing_Schultz', qRange = qRange, paramSugg=paramSugg,verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
-			else:
-				self.fit_data(fitType = 'Sing_Gauss', qRange = qRange, paramSugg=paramSugg,verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
-
-		if len(maxValues) == 2:
-			logging.debug('Performing Double Gaussian Fit')
-			paramSugg.update({'R1_av':maxPos[0],'R2_av':maxPos[1]})
-
-			#print 'The paramSugg before are: ',paramSugg
-			if 'Schultz' in forced_model:
-				self.fit_data(fitType = 'Double_Schultz', qRange = qRange, paramSugg=paramSugg, verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
-			else:
-				self.fit_data(fitType = 'Double_Gauss', qRange = qRange, paramSugg=paramSugg, verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
-			#print 'The fitted parameters are: ',self.fitResults['Double_Gauss']
 
 	def plot_fit(self, fitType, ax = None, fig = None, yshift = 0, plotDistribution = True,\
 	latexCode = False,  **kwargs):
@@ -829,10 +786,41 @@ class SmallAngleScattering(ScatteringObject):
 			return (ax,fig)
 
 
-	def fit_result_latex(self,fitType = 'Sing_Gauss', fileOutput = None, preamble = False):
+	def fit_result_latex(self,fitType = ['Sing_Gauss'], fileOutput = None, preamble = False, units = None, close = True):
+		'''fit_result_latex: exports the fits for the samples in latex format.
+		The list can be then written to a file specified in fileOutput. The user
+		can set which fits to export, whether the latex preamble should be included
+		anche which units to use for the size of the particles.
+			Args:
+				-fitType(list): The fits which should be exported in the table.
+					Defaults to ['Sing_Gauss'].
+				-fileOutput(string): If this is parameter is specified the list
+					is then written to the specified file. Defaults to None
+				-preamble(bool): Specifies whether the latex preamble containing
+					the packages to use should be inserted. If fileOutput is
+					specified it is automatically set to true. Defaults to False.
+				-units(string): Specifies which units should be used for the
+					output. If set to None the qUnits will be used.
+					Defaults to None
+				-close(bool): Specifies whether \end{document} should be appended
+					at the end. If fileOutput is specified this is automatically
+					set to True
+			-Returns:
+				List containing the latex code needed ot create the tables.
+
+		'''
+		convCoeff = 1
+		if units is not None:
+			if (units in _AvlbUnits) and (self.qUnits in _AvlbUnits):
+				convCoeff = _UnitsConv[units]/_UnitsConv[self.qUnits]
+			else:
+				units = self.qUnits
+		else:
+			units = self.qUnits
 
 		if fileOutput is not None:
 			preamble = True
+			close = True
 
 		if preamble:
 			lCode = [r'\documentclass[10pt,a4paper]{article}',\
@@ -852,24 +840,24 @@ class SmallAngleScattering(ScatteringObject):
 		else:
 			lCode = []
 		lCode.append(r'\begin{tabular}{l p{2cm} p{2cm} p{2cm} p{2cm} p{2cm} p{2cm}}')
-		header = r'\textbf{{Sample Name}}& $\mathbf{{\bar{{R}}}}$ ({0})& $\mathbf{{\sigma}}$ ({0})& \textbf{{Polydisp. (\%)}}& \textbf{{Fit Type}}& $\mathbf{{Red\chi}}$& \textbf{{Comments}}\\'.format(self.qUnits)
+		header = r'\textbf{{Sample Name}}& $\mathbf{{\bar{{R}}}}$ ({0})& $\mathbf{{\sigma}}$ ({0})& \textbf{{Polydisp. (\%)}}& \textbf{{Fit Type}}& $\mathbf{{Red\chi}}$& \textbf{{Comments}}\\'.format(units)
 		lCode.append(header)
 		lCode.append(r'\toprule')
 		if ('Sing_Gauss' in fitType) and (self.fitResults['Sing_Gauss'] is not None):
-			R = self.fitResults['Sing_Gauss']['R_av']
-			Rstderr = self.fitResults['Sing_Gauss']['R_av_stderr']
+			R = self.fitResults['Sing_Gauss']['R_av']*convCoeff
+			Rstderr = self.fitResults['Sing_Gauss']['R_av_stderr']*convCoeff
 			sigma = self.fitResults['Sing_Gauss']['sigma']
 			sigmaStderr = self.fitResults['Sing_Gauss']['sigma_stderr']
 			redChi = self.fitResults['Sing_Gauss']['redchi']
 			tableLine = r'{}& {:.3g}$\pm${:.3g}& {:.3g}$\pm${:.3g}& {:.3g}& {}&{:.3e}&\\'.format(self.sampleName, R, Rstderr, sigma, sigmaStderr, float(sigma)/R, 'Single Gaussian Dist.', redChi)
 			lCode.append(tableLine)
 		if ('Double_Gauss' in fitType) and (self.fitResults['Double_Gauss'] is not None):
-			R1 = self.fitResults['Double_Gauss']['R1_av']
-			R1stderr = self.fitResults['Double_Gauss']['R1_av_stderr']
+			R1 = self.fitResults['Double_Gauss']['R1_av']*convCoeff
+			R1stderr = self.fitResults['Double_Gauss']['R1_av_stderr']*convCoeff
 			sigma1 = self.fitResults['Double_Gauss']['sigma1']
 			sigma1Stderr = self.fitResults['Double_Gauss']['sigma1_stderr']
-			R2 = self.fitResults['Double_Gauss']['R2_av']
-			R2stderr = self.fitResults['Double_Gauss']['R2_av_stderr']
+			R2 = self.fitResults['Double_Gauss']['R2_av']*convCoeff
+			R2stderr = self.fitResults['Double_Gauss']['R2_av_stderr']*convCoeff
 			sigma2 = self.fitResults['Double_Gauss']['sigma2']
 			sigma2Stderr = self.fitResults['Double_Gauss']['sigma2_stderr']
 			ratio = self.fitResults['Double_Gauss']['ratio']
@@ -877,8 +865,8 @@ class SmallAngleScattering(ScatteringObject):
 			tableLine = r'{}& {:.3g}$\pm${:.3g}\newline{:.3g}$\pm${:.3g}& {:.3g}$\pm${:.3g}\newline{:.3g}$\pm${:.3g}& {:.3g}\newline{:.3g}& {}& {:.3e}&{:.3g}\%\newline{:.3g}\%\\'.format(self.sampleName, R1, R1stderr, R2, R2stderr, sigma1, sigma1Stderr, sigma2, sigma2Stderr, float(sigma1)/R1, float(sigma2)/R2, 'Bimodal Gaussian Dist.',redChi, ratio*100,(1-ratio)*100)
 			lCode.append(tableLine)
 		if ('Sing_Schultz' in fitType) and (self.fitResults['Sing_Schultz'] is not None):
-			R = self.fitResults['Sing_Schultz']['R_av']
-			Rstderr = self.fitResults['Sing_Schultz']['R_av_stderr']
+			R = self.fitResults['Sing_Schultz']['R_av']*convCoeff
+			Rstderr = self.fitResults['Sing_Schultz']['R_av_stderr']*convCoeff
 			sigma = R/np.sqrt(1.+self.fitResults['Sing_Schultz']['Z'])
 			sigmaStderr = sigma*self.fitResults['Sing_Schultz']['Z_stderr']/self.fitResults['Sing_Schultz']['Z']
 			logging.debug('The stderr on the sigma for a Schultz distribution is calculated using the \% stderr on Z.')
@@ -886,12 +874,12 @@ class SmallAngleScattering(ScatteringObject):
 			tableLine = r'{}& {:.3g}$\pm${:.3g}& {:.3g}$\pm${:.3g}& {:.3g}& {}& {:.3e}&\\'.format(self.sampleName, R, Rstderr, sigma, sigmaStderr, float(sigma)/R, 'Single Schultz Dist.', redChi)
 			lCode.append(tableLine)
 		if ('Double_Schultz' in fitType) and (self.fitResults['Double_Schultz'] is not None):
-			R1 = self.fitResults['Double_Schultz']['R1_av']
-			R1stderr = self.fitResults['Double_Schultz']['R1_av_stderr']
+			R1 = self.fitResults['Double_Schultz']['R1_av']*convCoeff
+			R1stderr = self.fitResults['Double_Schultz']['R1_av_stderr']*convCoeff
 			sigma1 = R/np.sqrt(1.+self.fitResults['Double_Schultz']['Z1'])
 			sigma1Stderr = sigma*self.fitResults['Double_Schultz']['Z1_stderr']/self.fitResults['Double_Schultz']['Z1']
-			R2 = self.fitResults['Double_Schultz']['R2_av']
-			R2stderr = self.fitResults['Double_Schultz']['R2_av_stderr']
+			R2 = self.fitResults['Double_Schultz']['R2_av']*convCoeff
+			R2stderr = self.fitResults['Double_Schultz']['R2_av_stderr']*convCoeff
 			sigma2 = R/np.sqrt(1.+self.fitResults['Double_Schultz']['Z2'])
 			sigma2Stderr = sigma*self.fitResults['Double_Schultz']['Z2_stderr']/self.fitResults['Double_Schultz']['Z2']
 			ratio = self.fitResults['Double_Schultz']['ratio']
@@ -900,7 +888,8 @@ class SmallAngleScattering(ScatteringObject):
 			tableLine = r'{}& {:.3g}$\pm${:.3g}\newline{:.3g}$\pm${:.3g}& {:.3g}$\pm${:.3g}\newline{:.3g}$\pm${:.3g}& {:.3g}\newline{:.3g}& {}& {:.3e}&{:.3g}\%\newline{:.3g}\%\\'.format(self.sampleName, R1, R1stderr, R2, R2stderr, sigma1, sigma1Stderr, sigma2, sigma2Stderr, float(sigma1)/R1, float(sigma2)/R2, 'Bimodal Schultz Dist.', redChi,ratio*100,(1-ratio)*100)
 			lCode.append(tableLine)
 		lCode.append(r'\end{tabular}')
-		if preamble:
+		lCode.append(r'\newline')
+		if close:
 			lCode.append(r'\end{document}')
 		if fileOutput is not None:
 			with open(fileOutput,'w') as fn:
@@ -921,14 +910,14 @@ class SmallAngleScattering(ScatteringObject):
 		value at which the distribution reaches 1/n the value at the peak (n=1000) or the
 		symmetric position.
 			Args:
-				fitType (string): the type of fit to plot
-				model (lmfit.Model): the lmfit model used to calculate the distribution
-				limitRatio (int): The curve will be calculated up to where the value is
+				-fitType (string): the type of fit to plot
+				-model (lmfit.Model): the lmfit model used to calculate the distribution
+				-limitRatio (int): The curve will be calculated up to where the value is
 					equal to Imax/limitRatio. Default: 1000
-				params (lmfit.Parameters): the lmfit parameters object which contains
+				-params (lmfit.Parameters): the lmfit parameters object which contains
 					the parameters of the distribution
 			Returns:
-				Numpy.array with the two values in increasing order
+				-Numpy.array with the two values in increasing order
 		"""
 		if verbose:
 			#print 'logging set to debug'

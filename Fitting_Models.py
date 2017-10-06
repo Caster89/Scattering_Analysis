@@ -287,6 +287,7 @@ def double_schultz_distribution(x, R1_av, Z1, R2_av, Z2, I0, ratio):
     #print 'Single Schultz returned a vector of {} with {}nan values'.format(returnVal.shape,np.sum(np.isnan(returnVal)))
 
     return returnVal
+
 def guess_from_dist(xs,ys,fitType = None, goodness = False, max_mode = 'wrap', verbose = True):
     """guess_from_dist: returns the parameter suggestions for a distribution curve.
         Args:
