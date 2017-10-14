@@ -111,7 +111,7 @@ class ScatteringObject(object):
 		self._fit_plot_dict = {'color' : 'k', 'linestyle' : 'None', 'linewidth' : 2, 'marker' : 'o', 'ms' : 4,\
 						  'mec' : 'None', 'fit_color' : 'r', 'fit_linestyle' : '-', 'fit_linewidth' : 2, \
 						  'fit_marker' : 'None', 'fit_ms' : 2, 'fit_mec' : 'None'}
-		
+
 		self._sampleName = kwargs.get('SampleName', None)
 		if fname is not None:
 			#Create list of keywords required in create_from_file and use them to
@@ -277,9 +277,9 @@ class ScatteringObject(object):
 		else:
 			print "Size mismatch: the q vector must have the same size as the I vector"
 			return 0
-		if bckgI is not None:
+		if Ibckg is not None:
 			if len(Ibckg) == len(q):
-				self.Ibckg = np.array(Ibackg)
+				self.Ibckg = np.array(Ibckg)
 			else:
 				print r"Size mismatch: the Bckg vector must have the same size as the I \n \
 				 vector, the background was not imported."

@@ -49,7 +49,7 @@ class SmallAngleScattering(ScatteringObject):
 	was not correctly loaded. It is also possible to first fit using the EM
 	method, and later use it as a starting point for the lmfit fit.
 	"""
-	def __init__(self,fname,**kwargs):
+	def __init__(self,fname = None,**kwargs):
 		'''The results of the fit are store in a dictionary, which is initaiate
 		with None values using the available fits described in _AvlbSASFit. Two
 		other dictionaries are created ot store the result from the porod
@@ -519,7 +519,7 @@ class SmallAngleScattering(ScatteringObject):
 		tempI = self.Iabs[mask]
 		logging.debug('After applying qRange the number of points is : '.format(len(tempq)))
 		xk, Rvec, H = EM.expected_maximization_method(tempq, tempI, Rmin = Rmin,\
-							Rmax = Rmax, eps = eps, k = k, numbElements =n umbElements,\
+							Rmax = Rmax, eps = eps, k = k, numbElements =numbElements,\
 							maxIter = maxIter, verbose = kwargs.get('verbose',False))
 
 		xk = xk.flatten()
