@@ -260,7 +260,7 @@ class ScatteringObject(object):
 			for kword in readHeader:
 				self._setup[kword] = readHeader[kword]
 
-	def create_from_data(self, q, I, Ibckg = None, qunits = 'nm', Iunits = 'm'):
+	def create_from_data(self, q, I, Ibckg = None, qUnits = 'nm', IUnits = 'm'):
 		"""Sets data by passing both the q values and the intesity
 			Args:
 				q (list): the q vector.
@@ -286,16 +286,16 @@ class ScatteringObject(object):
 		else:
 			self.Ibckg = np.zeros(self.Iraw.shape)
 			self.coeffBckg = 1
-		if qunits is not None:
-			if qunits in _AvlbUnits:
-				self.qUnits = qunits
+		if qUnits is not None:
+			if qUnits in _AvlbUnits:
+				self.qUnits = qUnits
 			else:
 				print r"{} is not a recognized unit. The available units are:\n".format(qunits)
 				for unt in AvlbUnits:
 					print r"\t - ", unt
-		if Iunits is not None:
-			if Iunits in _AvlbUnits:
-				self.IUnits = Iunits
+		if IUnits is not None:
+			if IUnits in _AvlbUnits:
+				self.IUnits = IUnits
 			else:
 				print r"{} is not a recognized unit. The available units are:\n".format(Iunits)
 				for unt in AvlbUnits:
