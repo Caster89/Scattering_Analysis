@@ -364,7 +364,7 @@ class SmallAngleScattering(ScatteringObject):
 		return params
 
 	def lmfit_fit(self, fitType, params, qRange = np.array([0,np.inf]),\
-	 			RedqRange = None, plotFit = False, fit_kws = {}, **kwargs):
+	 			RedqRange = None, plotFit = False, fit_kws = {},store_history=True, **kwargs):
 		"""lmfit_fit: fits the data to one of the model types. kwargs should
 		contain 2 qRanges, a first one over which the fit is done over the wide
 		qrange where the values are normalized by 1/I. A second at low-q range
@@ -382,6 +382,8 @@ class SmallAngleScattering(ScatteringObject):
 					Defaults to False
 				-fit_kws (dict): contains the dictionary to pass over to the
 					scipy function for the fit. Defaults ot empty dictionary.
+				-store_history (bool): determins whether to store the errors
+					during the itertions.
 		"""
 		if kwargs.get('verbose', False):
 			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
@@ -422,11 +424,24 @@ class SmallAngleScattering(ScatteringObject):
 				print '{}: {}'.format(k, params[k].value)
 
 
-		result = model.fit(tempI, params = params, q=tempq, weights = 1./tempI, fit_kws = fit_kws)
-		logging.debug('_____________FIRST FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
+		if store_history:
+			error_history = []
+			def storeError(pars, iter, resid, *args, **kwargs):
+				error_history.append(resid)
+			result = model.fit(tempI, params = params, q=tempq, weights = 1./tempI, fit_kws = fit_kws, iter_cb = storeError)
+			logging.debug('_____________FIRST FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
 																																									   result.message,\
 																																									   result.ier,\
 																																							   result.lmdif_message))
+			self.fitResults[fitType]['error_history']=error_history
+		else:
+			result = model.fit(tempI, params = params, q=tempq, weights = 1./tempI, fit_kws = fit_kws)
+			logging.debug('_____________FIRST FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
+																																									   result.message,\
+																																									   result.ier,\
+																																									    result.lmdif_message))
+
+
 		if kwargs.get('verbose',False):
 			print result.fit_report()
 			print 'Params after first fit:'
@@ -473,6 +488,7 @@ class SmallAngleScattering(ScatteringObject):
 		self.fitResults[fitType]['chi'] = result.chisqr
 		self.fitResults[fitType]['residual'] = result.residual
 		self.fitResults[fitType]['Units'] = self.qUnits
+
 		#print 'The data for {} fit was updated to:\n{}'.format(fitType,self.fitResults[fitType])
 
 		if kwargs.get('plotFit',False):
