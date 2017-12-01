@@ -5,9 +5,10 @@ import Expected_Maximization as EM
 import numpy as np
 import numpy.matlib
 import logging
-#import matplotlib.pyplot as plt
+
 import matplotlib
 matplotlib.use("Qt5Agg")
+#import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.ticker import ScalarFormatter
 from matplotlib.figure import Figure
@@ -18,10 +19,16 @@ from scipy import signal
 from scipy import interpolate
 from collections import OrderedDict
 from mpl_toolkits.mplot3d import Axes3D
+
+logging.basicConfig(format='[@%(module)s.%(funcName)s] - %(levelname)s:%(message)s', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
+
 try :
 	import lmfit
 except ImportError:
-	print "Could not import the lmfit package. Some fittings will be disabled."
+	logger.alert("Could not import the lmfit package. Some fittings will be disabled.")
 	lmfitAvlb = False
 else:
 	lmfitAvlb = True
@@ -33,29 +40,30 @@ try:
 except:
     gmpy2 = None
     from decimal import Decimal
-    print 'The Schultz fitting function is optimized by using the GMPY2 module to\
-deal with the large numbers required. The module was not found, so Decimal will\
-be used instead, but the calculations will be slower.'
+    logger.warning('The Schultz fitting function is optimized by using the GMPY2 module\
+	to deal with the large numbers required. The module was not found, so \
+	Decimal will be used instead, but the calculations will be slower.')
 
 
 
 class SmallAngleScattering(ScatteringObject):
-	"""SmallAngleScattering: this class is a child of ScatteringObject used to store
-	data arriving from small angle scattering measurements. It provides a method
-	to plot the data in log log scale as well as to fit it. There are several
-	different fitting methods available. The different methods can be divided in
-	2 main categories: those using the lmfit library and the one based on the
-	expected maximization method. The former are not available if the lmfit module
-	was not correctly loaded. It is also possible to first fit using the EM
-	method, and later use it as a starting point for the lmfit fit.
+	"""Child class of ScatteringObject, used to store data arriving from small
+	angle scattering measurements. It provides a method	to plot the data in log
+	log scale as well as to fit it. There are several different fitting methods
+	available. The different methods can be divided in 2 main categories:
+		-those using the lmfit library
+		-the one based on the expected maximization method.
+	The former are not available if the lmfit module was not correctly loaded.
+	It is also possible to first fit using the EM method, and later use it as a
+	starting point for the lmfit fit.
 	"""
 	def __init__(self,fname = None,**kwargs):
-		'''The results of the fit are store in a dictionary, which is initaiate
+		'''The results of the fit are stored in a dictionary, which is initaiate
 		with None values using the available fits described in _AvlbSASFit. Two
-		other dictionaries are created ot store the result from the porod
+		other dictionaries are created t0 store the result from the porod
 		invariant and the guinier regime
 		'''
-		self.fitResults = {f : None for f in _AvlbSASFit}
+		self.fitResults = {f : {} for f in _AvlbSASFit}
 		self.porod_invariant = None
 		self.guinier_regime = None
 
@@ -64,11 +72,11 @@ class SmallAngleScattering(ScatteringObject):
 	def plot_data(self, qRange=[0,np.inf],yShift=1, ax = None, fig = None, figSize = (6,6),\
 	 			  xUnits = None, yUnits =None, plot_dic={}, axLabelSize = 20,\
 				  labelSize = 18, tickSize = 6, tickWidth = 3, **kwargs):
-		"""plot_data: Plots the data in a log-log plot. If the axis is passed
-		then the data is plotted on the given axis, if not a figure of size
-		figSize is created and the axis places in it. The units on the x and y
-		axis can be selected. The keyword arguments are used to set the
-		parameters of the plots.
+		"""Plot the data in a log-log plot. If the axis is passed then the data
+		is plotted on the given axis, if not a figure of size figSize is created
+		and the axis places in it. The units on the x and y axis can be
+		selected. The keyword arguments are used to set the parameters of the
+		plots.
 			Args:
 				-qRange (list): the q-range over which the data should be
 					plotted. Defaults to [0, np.inf]
@@ -104,16 +112,16 @@ class SmallAngleScattering(ScatteringObject):
 		"""
 
 		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 		#Any keywords which might alter the plotting parameters are stored
 		#in the dictionary. This also allows the next plot to retain the
 		#same plotting style.
 		for k in self.plot_dict:
 			if k in plot_dic:
 				self.plot_dict[k] = plot_dic[k]
-		#plt.ion()
+
 		if ax is None:
 			fig = Figure(figsize = figSize)
 			ax = fig.add_subplot(111)
@@ -139,29 +147,20 @@ class SmallAngleScattering(ScatteringObject):
 			IConvCoeff = _UnitsConv[self.IUnits]/_UnitsConv[yUnits]
 		else:
 			yUnits = self.IUnits
-		logging.debug('SAS.plot_data():\nqConvCoeff: {}\nIConvCoeff: {}'.format(qConvCoeff,IConvCoeff))
+		logger.debug('SAS.plot_data():\nqConvCoeff: {}\nIConvCoeff: {}'.format(qConvCoeff,IConvCoeff))
 
 		if (self.Ierr is not None) and (kwargs.get('plot_error', False)):
-			'''
-			This part was modified, instead of asking the values every time, a
-			plot dictionary was created to store all the properties, and is
-			updated in case new parameters are passed to the plotting function.
-			'''
 			ax.errorbar(tempq*qConvCoeff,tempI*IConvCoeff*yShift,yerr = tempE*IConvCoeff*yShift, **self.plot_dict)
-					#color = kwargs.get('color','k'),\
-		 			#linestyle = kwargs.get('linestyle', 'None'),marker = kwargs.get('marker','o'),\
-		 			#markeredgecolor = kwargs.get('color','k'), ms = kwargs.get('ms',2))
 			ax.set_xscale("log", nonposx = "clip")
 			ax.set_yscale("log", nonposx = "clip")
 		else:
-			logging.debug('SAS.plot_data():\nplotting q: {}\nplotting I: {}'.format(tempq*qConvCoeff,tempI[10:]*IConvCoeff*yShift))
+			logger.debug('SAS.plot_data():\nplotting q: {}\nplotting I: {}'.format(tempq*qConvCoeff,tempI[10:]*IConvCoeff*yShift))
 			ax.loglog(tempq*qConvCoeff,tempI*IConvCoeff*yShift, **self.plot_dict)
-					  #color = kwargs.get('color','k'),\
-						#linestyle = kwargs.get('linestyle', 'None'),marker = kwargs.get('marker','o'),\
-						#markeredgecolor = kwargs.get('color','k'), ms = kwargs.get('ms',2))
 
 		#Set the x an y limits
-		#yLimits = [min(tempI[np.isfinite(tempI)]*IConvCoeff*yShift),max(tempI[np.isfinite(tempI)]*IConvCoeff*yShift)]
+		logger.debug('ylimits:{},{}'.format(min(tempI[np.isfinite(tempI)]*IConvCoeff*yShift),max(tempI[np.isfinite(tempI)]*IConvCoeff*yShift)))
+		logger.debug('xlimits:{},{}'.format(min(tempq[np.isfinite(tempI)]*qConvCoeff),max(tempq[np.isfinite(tempI)]*qConvCoeff)))
+
 		ax.set_ylim(min(tempI[np.isfinite(tempI)]*IConvCoeff*yShift),max(tempI[np.isfinite(tempI)]*IConvCoeff*yShift))
 		ax.set_xlim(min(tempq[np.isfinite(tempI)]*qConvCoeff),max(tempq[np.isfinite(tempI)]*qConvCoeff))
 
@@ -176,14 +175,16 @@ class SmallAngleScattering(ScatteringObject):
 			ax.set_ylabel(r'Intensity', fontsize = axLabelSize)
 		ax.tick_params(labelsize = labelSize, size = tickSize,
 		 				width = tickWidth)
+
 		#Format The Scientific notation
 		#ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='y')
 		#implement a method to place the major and minor tick marks
 		return (ax, fig)
 
 	def plot_slopes(self, slope, frequency = 10,slope_color ='k', ax = None, **kwargs):
-		"""plot_slopes: plots the data along with a series of parallel lines with given slope.
-		this can be useful when trying ot detrmine the slope of a particlare scattering curve.
+		"""Plot the data along with a series of parallel lines with given slope.
+		this can be useful when trying ot detrmine the slope of a particlare
+		scattering curve.
 			Args:
 				slope (int): the power of the polynomial to plot x^(slope). As the slope is
 					(almost) always decreasing, any value given will be taken as negative
@@ -221,13 +222,12 @@ class SmallAngleScattering(ScatteringObject):
 				visible = False
 			ax.loglog(tempq,tempLine,slope_color,linestyle = '--')
 			n+=1
-		#plt.draw()
-		#plt.ioff()
+
 		return [ax,fig]
 
 	def fit_data(self, fitType = "Sing_Gauss",**kwargs):
-		"""fit_data: wrapper function used to decide which fitting algorithm to
-		use and to set it up.
+		"""Wrapper function used to decide which fitting algorithm to use and to
+		 set it up.
 			Args:
 				-fitType (string): the method used for fitting the data. Has to
 					be defined in _AvlbSASFit contained in config.py. Defaults
@@ -242,48 +242,85 @@ class SmallAngleScattering(ScatteringObject):
 		"""
 
 		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 		#Check to make sure that if the fitting method required used the lmfit
 		#package, it is in fact available
 		if fitType in _lmfitModels:
 			if not lmfitAvlb:
-				logging.error("Impossible to fit using {} model because lmfit was not importent.".format(fitType))
-				return 0
+				logger.error("Impossible to fit using {} model because lmfit was not importent.".format(fitType))
+				return False
 
-			params = self.create_params(fitType, kwargs.get('paramSugg', {}))
+			params = self.create_params(fitType, kwargs.get('paramSugg', {}), verbose = kwargs.get('verbose', False))
 			self.lmfit_fit(fitType, params, **kwargs)
 
-		if fitType == "EM":
+		elif fitType == "EM":
 			self.em_fit( **kwargs)
 
-		if fitType == "Dist_from_EM":
+		elif fitType == "Dist_from_EM":
 			self.lmfit_from_em(**kwargs)
 
-		#if kwargs.get('plot',False):
-			#self.plot_fit(type)
-
-		if fitType not in _AvlbSASFit:
+		elif fitType not in _AvlbSASFit:
 			print "{} is not an implemented fit. The available options are:".format(fitType)
 			for ft in _AvlbSASFit:
 				print "\t - {}".format(ft)
-			return 0
+			return False
 
-	def create_params(self, fitType, paramSugg = {}):
-		"""create_params: creates the Parameter object for the lmfit package
-		based on the type of fit which is chosen between the available fits.
+	def create_params(self, fitType, paramSugg = {}, verbose = False):
+		"""Create the Parameter object for the lmfit package based on the type
+		of fit which is chosen between the available fits.
 			Args:
 				fitType (string): the method used for fitting. Has to be defined
 					in _lmfitModels
 				paramSugg (dict): dictionary containing all the default values
-					for the parameters. These depend on the fit used.
+					for the parameters. These depend on the fit used. For
+					example, for a single gauss distribution:
+						paramSuff{
+							R_av (int): Average radius. Defaults to 10.
+							R_min (int): Lower limit for the radius. Defaults to
+							 	0.
+							R_max (int): Upper limit for the radius. Defaults to
+							 	None.
+							R_vary (bool): Whether the radius should be allowed
+								to vary. Defaults to True.
+							sigma (int): The width of the distribution. Defaults
+								to 0.5.
+							sigma_min (int): Lower limit for the width.
+								Defaults to 0.
+							sigma_max (int): Upper limit for the width.
+							 	Defaults to None
+							sigma_vary (bool): Whether the width should be
+								allowed to vary. Defaults to True
+							I0 (int): Exponent of the intensity. Defaults to 1
+							I0_min (int): Lower bound on the exponent of the
+								intensity. Defaults to None
+							I0_max (int): Upper bound on the exponent of the
+								intensity. Defaults to None
+							I0_vary (bool): Whether the exponent of the
+								intensity should be allowed to vary. Defaults
+								to True
+							bckg (int): Value of a constant background. Defaults
+								to 0
+							bckg_min (int): Lower bound on the constant
+								background. Defaults to None
+							bckg_max (int): Upper bound on the constant
+								background. Defaults to None
+							bckg_vary (bool): Whether the constant background
+							should be allowed to vary. Defaults to False
+						}
+
 			Returns:
 				params (:obj: Parameters): a Parameters object from the lmfit
 				 	package with all the parameters needed to fit using the
 					selected model.
 
 		"""
+		if verbose:
+			logger.setLevel(logging.DEBUG)
+		else:
+			logger.setLevel(logging.INFO)
+		logger.debug('Called parameter creator with the following suggestion for fitType {}\n{}'.format(fitType,paramSugg))
 		params = lmfit.Parameters()
 		if fitType == "Sing_Gauss":
 			params.add("R_av", value = paramSugg.get('R_av',10),\
@@ -361,18 +398,20 @@ class SmallAngleScattering(ScatteringObject):
 					max = paramSugg.get('bckg_max',None),\
 					vary = paramSugg.get('bckg_vary',False))
 
+		logger.debug('Created lmfit parameters\n{}'.format(params.pretty_print()))
+
 		return params
 
 	def lmfit_fit(self, fitType, params, qRange = np.array([0,np.inf]),\
 	 			RedqRange = None, plotFit = False, fit_kws = {},store_history=True, **kwargs):
-		"""lmfit_fit: fits the data to one of the model types. kwargs should
-		contain 2 qRanges, a first one over which the fit is done over the wide
-		qrange where the values are normalized by 1/I. A second at low-q range
-		for fitting the I0. If no ranges are provided the whole q range will be
-		used for the first fit and 10% of range will be used for the second fit
+		"""Fit the data to one of the model types available.
+		The two qRanges determin where the values are normalized by 1/I, while
+		the second is done with no normalization for fitting the I0. If no
+		ranges are provided the whole q range will be used for the first fit and
+		10% of range will be used for the second fit.
 			Args:
 				-fitType (string): the type of distribution used to fit the data
-				-params (:obj: Parameters): The Parameter object from lmfit with
+				-params (:obj: Parameters): the Parameter object from lmfit with
 					all the parameters provided.
 				-qRange (list): the first range of q-values used for fitting with
 					weights = 1/I. Defaults to [0,np.inf]
@@ -386,9 +425,9 @@ class SmallAngleScattering(ScatteringObject):
 					during the itertions.
 		"""
 		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 
 		model = lmfit.Model(getattr(Fitting_Models, _lmfitModelFunctions[fitType]),\
 							independent_variables = ['q'])
@@ -401,52 +440,36 @@ class SmallAngleScattering(ScatteringObject):
 		tempI = np.nan_to_num(tempI)
 
 		#convFact = 1
-		#if "Schultz" in fitType:
-			#logging.info(" Due to the form of the Schultz distribution the data has to be shifted to m^(-1).\
- 		#Therefore the intensity fit might be off. Not sure, will have to check.")
-			#if self.qUnits is None:
-				#logging.info('The wavevecto has no units, nanometers will be used')
-				#convFact = _UnitsConv['m']/_UnitsConv['nm']
-			#else:
-				#convFact = _UnitsConv['m']/_UnitsConv[self.qUnits]
+
 		#convFact = 1
-		logging.debug('SAS.lmfit_fit() tempq size: ', tempq.shape)
+		logger.debug('SAS.lmfit_fit() tempq size: {}'.format(tempq.shape))
 		tempq = tempq.astype(np.float64)
 		tempI = tempI.astype(np.float64)
 
-		#np.array([II.astype(np.float64) for II in tempI])
-		#fit_kws = kwargs.get('fit_kws',{})
+
 		if 'nan_policy' not in fit_kws:
 			fit_kws['nan_policy'] = 'omit'
-		if kwargs.get('verbose', False):
-			print 'Params before fit:'
-			for k in params:
-				print '{}: {}'.format(k, params[k].value)
-
+		logger.debug('Parameters before fit:\n{}'.format(params.pretty_print()))
 
 		if store_history:
-			error_history = []
+			self.fitResults[fitType]['error_history'] = []
 			def storeError(pars, iter, resid, *args, **kwargs):
-				error_history.append(resid)
+				self.fitResults[fitType]['error_history'].append(resid)
 			result = model.fit(tempI, params = params, q=tempq, weights = 1./tempI, fit_kws = fit_kws, iter_cb = storeError)
-			logging.debug('_____________FIRST FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
-																																									   result.message,\
-																																									   result.ier,\
-																																							   result.lmdif_message))
-			self.fitResults[fitType]['error_history']=error_history
+			#self.fitResults[fitType]['error_history']=error_history
 		else:
 			result = model.fit(tempI, params = params, q=tempq, weights = 1./tempI, fit_kws = fit_kws)
-			logging.debug('_____________FIRST FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
-																																									   result.message,\
-																																									   result.ier,\
-																																									    result.lmdif_message))
 
 
-		if kwargs.get('verbose',False):
-			print result.fit_report()
-			print 'Params after first fit:'
-			for k in result.params:
-				print '{}: {}'.format(k, result.params[k].value)
+		logger.debug('_____________FIRST FIT____________\n'
+			+ 'The fit succeded: {}\n'.format(result.success)
+			+ 'Lmfit message: {}\n'.format(result.message)
+			+ 'The scipy return code is: {}\n'.format(result.ier)
+			+ 'The scipy message is: {}\n'.format(result.lmdif_message)
+			+' _______________________')
+
+		logger.debug('Params after first fit:\n{}'.format(result.params.pretty_print()))
+
 		#Second fit done over the reduced range in order to correctly fit the
 		#intensity
 		if RedqRange is None:
@@ -455,9 +478,7 @@ class SmallAngleScattering(ScatteringObject):
 		tempq = self.q[mask]
 		tempI = self.Iabs[mask]
 
-		#if "Schultz" in fitType:
-			#convFact = _UnitsConv['m']/_UnitsConv[self.qUnits]
-		#tempq = tempq*convFact
+
 		#All parameters except I0 are set to constant
 		for p in result.params:
 			if p != 'I0':
@@ -465,41 +486,41 @@ class SmallAngleScattering(ScatteringObject):
 		tempI = np.nan_to_num(tempI)
 		tempq = tempq.astype(np.float64)
 		tempI = tempI.astype(np.float64)
-		#np.array([II.astype(np.float64) for II in tempI])
 
 		resultI = model.fit(tempI, result.params, q = tempq, fit_kws = fit_kws)
-		if kwargs.get('verbose', False):
-			print 'Params from Second fit:'
-			for k in resultI.params:
-				print '{}: {}'.format(k, resultI.params[k].value)
 
-		logging.debug('_____________SECOND FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
-																																									   result.message,\
-																																									   result.ier,\
-																																									   result.lmdif_message))
+		logger.debug('Params after second fit:\n{}'.format(resultI.params.pretty_print()))
+
+		logger.debug('_____________SECOND FIT____________\n'
+			+ 'The fit succeded: {}\n'+format(resultI.success)
+			+ 'Lmfit message: {}\n'.format(resultI.message)
+			+ 'The scipy return code is: {}\n'.format(resultI.ier)
+			+ 'The scipy message is: {}\n'.format(resultI.lmdif_message)
+			+' _______________________')
+
 		#The results of the fit are stored in the correct dictionary
 		#self.fitResults[fitType] = {p:result.params[p].value for p in result.params}
-		self.fitResults[fitType] = result.params.valuesdict()
+		self.fitResults[fitType].update(result.params.valuesdict())
 		self.fitResults[fitType]['I0'] = resultI.params['I0'].value
+
 		self.fitResults[fitType].update({'{}_stderr'.format(p):result.params[p].stderr for p in result.params})
 		self.fitResults[fitType]['I0_stderr'] = resultI.params['I0'].stderr
+
 		self.fitResults[fitType]['qRange'] = qRange
 		self.fitResults[fitType]['redchi'] = result.redchi
 		self.fitResults[fitType]['chi'] = result.chisqr
 		self.fitResults[fitType]['residual'] = result.residual
 		self.fitResults[fitType]['Units'] = self.qUnits
 
-		#print 'The data for {} fit was updated to:\n{}'.format(fitType,self.fitResults[fitType])
-
 		if kwargs.get('plotFit',False):
 			self.plot_fit(fitType)
 
 	def em_fit(self, qRange = np.array([0,np.inf]),Rmin = 0.1, Rmax = 0, numbElements = 100,
 	 	eps = 1e-2, k= 3, maxIter = 10000, **kwargs):
-		'''em_fit performs a recursive fit of the the SAS data using the algorithm
+		"""Perform a recursive fit of the the SAS data using the algorithm
 		 taken from DOI: 10.1137/15M1024354.
 		 	Args:
-				-qRange (np.array): The extremes between which to fit the data.
+				-qRange (np.array): The extrems between which to fit the data.
 					Defaults to [0,np.inf]
 				-Rmin (float): The smallest radius to consider for the fit. The
 					units are those used for q.	Defaults to 0.1
@@ -517,23 +538,20 @@ class SmallAngleScattering(ScatteringObject):
 				-maxIter (int): maximum number of iterations to do before stopping
 					the algorithm even if the convergence was not achieved.
 
-		'''
+		"""
 		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 
 
 		convFact = 1
 		if self.qUnits is not None:
 			convFact = _UnitsConv[kwargs.get('units','nm')]/_UnitsConv[self.qUnits]
-		logging.debug('orignial number of points (q-values): {}'.format(len(self.q)))
-		#qRange = kwargs.get('qRange',np.array([0,np.inf]) )
-		logging.debug("the given qRange is: {}, while the extremes of the q vector are: {}, {}".format(qRange,self.q[0],self.q[-1]))
 		mask = np.logical_and(self.q>min(qRange), self.q<max(qRange))
 		tempq = self.q[mask]
 		tempI = self.Iabs[mask]
-		logging.debug('After applying qRange the number of points is : '.format(len(tempq)))
+
 		xk, Rvec, H = EM.expected_maximization_method(tempq, tempI, Rmin = Rmin,\
 							Rmax = Rmax, eps = eps, k = k, numbElements =numbElements,\
 							maxIter = maxIter, verbose = kwargs.get('verbose',False))
@@ -550,13 +568,13 @@ class SmallAngleScattering(ScatteringObject):
 
 	def lmfit_from_em(self,forced_model = None, qRange = np.array([0,np.inf]),\
 	fromVolume = False, **kwargs):
-		'''Uses the results from the EM fit as a starting point for the lmfit method.
-		looks for at most 2 peaks and uses gaussian distributions. Implemetation for the Schultz
-		distribution still have to be made
+		"""Use the results from the EM fit as a starting point for the lmfit
+		method. Looks for at most 2 peaks and determine their position and width
+		using gaussian models
 			Args:
 				-forced_model (String): model imposed (single or double, Gauss or
 					Schultz). If None the best model based on the number of peaks
-					founf. Defaults to None
+					found. Defaults to None
 				-qRange (np.ndarray): Range over which the fit should be done.
 					Defaults to [0,np.inf]
 				-fromVolume (bool): If True the fitted distribution will be the
@@ -564,19 +582,20 @@ class SmallAngleScattering(ScatteringObject):
 					be used. Default is False.
 				kwargs (dict):
 					order (int): parameter to find the maxima defined as:
-						'How many points on each side to use for the comparison to consider'
-						Defaults to 3
-					max_mod(String): tells argrelmax whether the data extremes should be considered
-						as maxima ('wrap') or not ('clip') defaults to 'wrap'
-		'''
+						'How many points on each side to use for the comparison
+						to consider'. Defaults to 3
+					max_mod(String): tells argrelmax whether the data extremes
+						should be considered as maxima ('wrap') or not ('clip').
+						Defaults to 'wrap'
+		"""
 		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=10)
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-		#qRange = kwargs.get('qRange',np.array([0,np.inf]) )
+			logger.setLevel(logging.INFO)
+
 
 		if self.fitResults['EM'] is None:
-			logging.info('SAS.lmfit_from_em(): Expected maximization has not been performed on the sample. It will be performed using the default arguments')
+			logging.info('Expected maximization has not yet been performed on the sample. It will be performed using the default arguments')
 			self.em_fit(qRange = qRange)
 
 		Rvec = self.fitResults['EM']['Rvec']
@@ -587,14 +606,15 @@ class SmallAngleScattering(ScatteringObject):
 		paramSugg, fitType, redchi = Fitting_Models.guess_from_dist(Rvec,xk,fitType = forced_model, verbose = kwargs.get('verbose', False), goodness = True)
 		self.fit_data(fitType = fitType, qRange = qRange, paramSugg=paramSugg,verbose = kwargs.get('verbose',False),fit_kws = kwargs.get('fit_kws',{}))
 
-		return 0
+		return True
 
 	def plot_fit(self, fitType, ax = None, fig = None, yshift = 0, plotDistribution = True,\
 	latexCode = False,  **kwargs):
-		"""plot_fit: used to plot the results of the fit. Creates 2 axis, on the left the
-		data plus the theoretical scattering curve (in solid line in the fitted range and as
-		dashed line outside of the range). On the right plots the particle distribution as
-		 a histogram. If the two axis are provided it used the given axes.
+		"""Plot the results of the fit. Creates 2 axis, on the left the data
+		plus the theoretical scattering curve (in solid line in the fitted range
+		and as dashed line outside of the range). On the right plots the
+		particle distribution as a histogram. If the two axis are provided it
+		used the given axes.
 			Args:
 				fitType (string): the type of fit to plot
 				ax (list of :obj: plt.axes): the two axis used to plot the curves
@@ -616,10 +636,9 @@ class SmallAngleScattering(ScatteringObject):
 		"""
 		if kwargs.get('verbose', False):
 			#print 'logging set to debug'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			#print 'logging set to info'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.INFO)
+			logger.setLevel(logging.INFO)
 
 		qConvFact = 1
 		IConvFact = 1
@@ -651,8 +670,8 @@ class SmallAngleScattering(ScatteringObject):
 									independent_variables = ['x'])
 
 			if self.fitResults[fitType] is None:
-				logging.error("No fit using {} has been performed yet!".format(fitType))
-				return 0
+				logger.error("No fit using {} has been performed yet!".format(fitType))
+				return False
 			else:
 				params = self.create_params(fitType)
 				for p in params:
@@ -662,8 +681,8 @@ class SmallAngleScattering(ScatteringObject):
 
 		if fitType == "EM":
 			if self.fitResults['EM'] is None:
-				logging.error("No expected maximization has been performed yet!")
-				return 0
+				logger.error("No expected maximization has been performed yet!")
+				return False
 			else:
 				RedqRange = self.fitResults['EM']['qRange']
 				distModel = 'EM'
@@ -671,7 +690,6 @@ class SmallAngleScattering(ScatteringObject):
 		#The axes are set-up, the first one to plot the scattering curve+fit, the second
 		#to plot the distribution
 		if plotDistribution and (ax is None or len(ax) != 2):
-		#if ax is None or len(ax) != 2:
 			fig = Figure(figsize=kwargs.get('figsize',(22,10)))
 			gs = matplotlib.gridspec.GridSpec(1,3)
 			ax = [fig.add_subplot(gs[0,0:2]), fig.add_subplot(gs[0,2])]
@@ -684,12 +702,11 @@ class SmallAngleScattering(ScatteringObject):
 		ax[0].tick_params(labelsize = kwargs.get('labelSize',18),size = kwargs.get('tickSize',6),
 		 				width = kwargs.get('tickWidth',3) )
 
-
-		#ax[0].ticklabel_format(style='sci',scilimits=(-2,2),axis='both')
 		yFrmt = ScalarFormatter()
 		yFrmt.set_powerlimits((-2,2))
 		yFrmt.set_scientific(True)
 		ax[1].yaxis.set_major_formatter(yFrmt)
+
 		if plotDistribution:
 			ax[1].set_ylabel('Number Distribution', fontsize = kwargs.get('lableSize',20))
 			if qUnits in _AvlbUnits:
@@ -707,17 +724,14 @@ class SmallAngleScattering(ScatteringObject):
 			ax[0].set_ylabel('Intensity ({}$^{{-1}}$)'.format(_UnitsSymbols[qUnits]), fontsize = kwargs.get('lableSize',20))
 		else:
 			ax[0].set_ylabel('Intensity', fontsize = kwargs.get('lableSize',20))
+
 		#If the error is available the experimental data is plotted with error
 		#bars, if not as normal scatter points
-
 		if self.Ierr is not None and kwargs.get('plot_error',False):
 			ax[0].errorbar(self.q*qConvFact, self.Iabs*IConvFact*10**yshift, yerr=self.Ierr*IConvFact,\
 							color = self.fit_plot_dict['color'], linestyle = self.fit_plot_dict['linestyle'],\
 							marker = self.fit_plot_dict['marker'], ms = self.fit_plot_dict['ms'],\
 							markeredgecolor = self.fit_plot_dict['mec'])
-			#color = kwargs.get('expColor','k'), linestyle = kwargs.get('expLinestyle','None'),\
-			#marker = kwargs.get('marker','o'), ms = kwargs.get('ms',2), \
-			#markeredgecolor = kwargs.get('expColor','k'))
 			ax[0].set_xscale("log", nonposx = "clip")
 			ax[0].set_yscale("log", nonposx = "clip")
 		else:
@@ -726,7 +740,6 @@ class SmallAngleScattering(ScatteringObject):
 						marker = self.fit_plot_dict['marker'], ms = self.fit_plot_dict['ms'],\
 						markeredgecolor = self.fit_plot_dict['mec'])
 
-		#print 'THe reduced q range {}'.format(RedqRange)
 		mask = np.logical_and(self.q>min(RedqRange), self.q<max(RedqRange))
 		tempq = self.q[mask]
 
@@ -740,11 +753,10 @@ class SmallAngleScattering(ScatteringObject):
 					 limitRatio = kwargs.get('limitRatio',1000.))
 				else:
 					rLimits = self._find_distribution_limits(fitType, distModel)
-			logging.debug('Calculated limits for radii: {}'.format(rLimits))
+			logger.debug('Calculated limits for radii: {}'.format(rLimits))
 			radii = np.arange(min(rLimits), max(rLimits), (max(rLimits)-min(rLimits))/2000)
 
 		if fitType in _lmfitModels:
-			logging.debug('Plotting {}'.format(fitType))
 			ax[0].loglog(self.q*qConvFact, 10**yshift*model.eval(params = params, q=self.q),\
 							color = self.fit_plot_dict['fit_color'], linestyle = '--', linewidth = self.fit_plot_dict['fit_linewidth'],\
 							marker = self.fit_plot_dict['fit_marker'], ms = self.fit_plot_dict['fit_ms'],\
@@ -759,10 +771,7 @@ class SmallAngleScattering(ScatteringObject):
 							marker = self.fit_plot_dict['fit_marker'], ms = self.fit_plot_dict['fit_ms'],\
 							markeredgecolor = self.fit_plot_dict['fit_mec'])
 		elif fitType == 'EM':
-			#self._plot_em_result(ax, RedqRange, **kwargs)
-			#print 'tempq shape', tempq.shape
-			#expI = np.dot(self.EMFit['H'], self.EMFit['xk']).squeeze()
-			#print 'H shape', expI.shape
+
 			ax[0].loglog(tempq*qConvFact, 10**yshift*np.dot(self.fitResults['EM']['H'], self.fitResults['EM']['xk'])*IConvFact,\
 						color = self.fit_plot_dict['fit_color'], linestyle = self.fit_plot_dict['fit_linestyle'], linewidth = self.fit_plot_dict['fit_linewidth'],\
 						marker = self.fit_plot_dict['fit_marker'], ms = self.fit_plot_dict['fit_ms'],\
@@ -791,9 +800,9 @@ class SmallAngleScattering(ScatteringObject):
 							markeredgecolor = self.fit_plot_dict['fit_mec'])
 
 		else:
-			logging.info("Plotting of other fitting methods has not been implemented yet")
-			return 0
-		#plt.show()
+			logger.info("Plotting of other fitting methods has not been implemented yet")
+			return False
+
 		fig.suptitle(figTitle, fontsize = kwargs.get('lableSize',20)+2 )
 		if latexCode:
 			lCode = fit_result_latex(fitType = fitType)
@@ -803,10 +812,10 @@ class SmallAngleScattering(ScatteringObject):
 
 
 	def fit_result_latex(self,fitType = ['Sing_Gauss'], fileOutput = None, preamble = False, units = None, close = True):
-		'''fit_result_latex: exports the fits for the samples in latex format.
+		"""Export the fits for the samples in latex format.
 		The list can be then written to a file specified in fileOutput. The user
-		can set which fits to export, whether the latex preamble should be included
-		anche which units to use for the size of the particles.
+		can set which fits to export, whether the latex preamble should be
+		included and which units to use for the size of the particles.
 			Args:
 				-fitType(list): The fits which should be exported in the table.
 					Defaults to ['Sing_Gauss'].
@@ -824,7 +833,7 @@ class SmallAngleScattering(ScatteringObject):
 			-Returns:
 				List containing the latex code needed ot create the tables.
 
-		'''
+		"""
 		convCoeff = 1
 		if units is not None:
 			if (units in _AvlbUnits) and (self.qUnits in _AvlbUnits):
@@ -855,6 +864,7 @@ class SmallAngleScattering(ScatteringObject):
 			r'\begin{document}']
 		else:
 			lCode = []
+
 		lCode.append(r'\begin{tabular}{l p{2cm} p{2cm} p{2cm} p{2cm} p{2cm} p{2cm}}')
 		header = r'\textbf{{Sample Name}}& $\mathbf{{\bar{{R}}}}$ ({0})& $\mathbf{{\sigma}}$ ({0})& \textbf{{Polydisp. (\%)}}& \textbf{{Fit Type}}& $\mathbf{{Red\chi}}$& \textbf{{Comments}}\\'.format(units)
 		lCode.append(header)
@@ -903,6 +913,7 @@ class SmallAngleScattering(ScatteringObject):
 			redChi = self.fitResults['Double_Schultz']['redchi']
 			tableLine = r'{}& {:.3g}$\pm${:.3g}\newline{:.3g}$\pm${:.3g}& {:.3g}$\pm${:.3g}\newline{:.3g}$\pm${:.3g}& {:.3g}\newline{:.3g}& {}& {:.3e}&{:.3g}\%\newline{:.3g}\%\\'.format(self.sampleName, R1, R1stderr, R2, R2stderr, sigma1, sigma1Stderr, sigma2, sigma2Stderr, float(sigma1)/R1, float(sigma2)/R2, 'Bimodal Schultz Dist.', redChi,ratio*100,(1-ratio)*100)
 			lCode.append(tableLine)
+
 		lCode.append(r'\end{tabular}')
 		lCode.append(r'\newline')
 		if close:
@@ -915,13 +926,13 @@ class SmallAngleScattering(ScatteringObject):
 
 
 	def _find_distribution_limits(self, fitType, model, params = None, limitRatio = 1000., verbose = False):
-		"""_find_distribution_limits: determins the limits of the distribution plot
-		if they are not given. This is done by taking the peak (for bimodal dist.
+		"""Determin the limits of the distribution plot in those cases in which
+		they are not given. This is done by taking the peak (for bimodal dist.
 		the left peak is used for the left limit while the right peak is used for
 		the right limit), and calculating the value of the distribution.
-		from 0 to the peak. The left boundary will be taken as the value at which the
-		distribution reaches 1/n the value at the peak (n=100?), or 0. The right boundary
-		will be taken by calculating the distribution between the rightmost peak and a
+		from 0 to the peak. Take the left boundary as the value at which the
+		distribution reaches 1/n the value at the peak, or 0. Take the right
+		boundary by calculating the distribution between the rightmost peak and a
 		position simmetrically opposit the left peak. The limit will be selected as the
 		value at which the distribution reaches 1/n the value at the peak (n=1000) or the
 		symmetric position.
@@ -936,32 +947,35 @@ class SmallAngleScattering(ScatteringObject):
 				-Numpy.array with the two values in increasing order
 		"""
 		if verbose:
-			#print 'logging set to debug'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			#print 'logging set to info'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.INFO)
+			logger.setLevel(logging.INFO)
 
+		if fitType not in _AvlbSASFit:
+			logger.error('{fitType} is not a valid fitting model. You can choose between:\n{avlbFits}').format(fitType=fitType, avlbFits=_AvlbSASFit)
+			return False
 		if fitType in _lmfitModels:
 			if params is None:
-				logging.error("To calculate the radii limits for an lmfit model you need to provide the prameters")
-				return 0
+				logger.error("To calculate the radii limits for an lmfit model you need to provide the prameters")
+				return False
 
 			if "Sing" in fitType:
 				R_av = params['R_av'].value
 			elif "Double" in fitType:
 				R_av = min(params['R1_av'].value, params['R2_av'].value)
-				logging.debug('The smalles peak is at: {}'.format(R_av))
+				logger.debug('The smaller peak is at: {}'.format(R_av))
 			xs = np.arange(0,R_av,R_av/100.)
 			ys = model.eval(params = params, x = xs)
 
 			lowerThan = xs[ys<ys[-1]/limitRatio]
 			if lowerThan.size == 0:
+				legger.debug('The function does not descend below 1/{}th before reaching 0'.format(limitRatio))
 				lLimit = 0
 			else:
 				lLimit = lowerThan[-1]
 			if "Double" in fitType:
 				R_av = max(params['R1_av'].value, params['R2_av'].value)
+				logger.debug('The larger peak is at: {}'.format(R_av))
 
 			step = 1
 			cont = True
@@ -973,6 +987,7 @@ class SmallAngleScattering(ScatteringObject):
 				if lowerThan.size == 0:
 					step += 1
 					if step > 7:
+						logger.debug("The curve didn't go below 1/{}th of the maximum before {}*R_av".format(limitRatio,2**8))
 						step = 7
 						cont = False
 						rLimit = 2**step*R_av
@@ -980,59 +995,65 @@ class SmallAngleScattering(ScatteringObject):
 					rLimit = lowerThan[0]
 					cont = False
 		elif fitType == 'EM':
-			#Should be changed so that the maxima are found, the first and second
+			#TODO: update the method for the EM so that, as with the lmfit, it
+			#scales the xRange around the peaks.
 			lLimit = self.fitResults['EM']['Rvec'][0]
 			rLimit = self.fitResults['EM']['Rvec'][-1]
-
 
 		return np.array([lLimit,rLimit])
 
 	def fit_guinier_regime(self, error_lim = 0.01, min_q = 3,skip_initial = 0, plot = False, verbose = False):
-		"""guinier_regime: fit the data in the guinier regime using the linear relationship
+		"""Fit the data in the guinier regime using the linear relationship
 		   ln(I(q)) = -q^2*Rg/3
 		   Rg = -m*3
 			Args:
-				error_lim (long): acceptable relative error between the linear fit and the
-					data. the value has to be between 0 and 1, 0 excluded. Defaults to 0.01
-				min_q (int): minimum number of points needed to validate the Guinier regime
-					fit. Has to be greater than 3. Defaults to 3
+				error_lim (long): acceptable relative error between the linear
+					fit and the data. The value has to be between 0 and 1, 0
+					excluded. Defaults to 0.01
+				min_q (int): minimum number of points needed to validate the
+					Guinier regime fit. Has to be greater than 3. Defaults to 3
 				skip_initial (int): number of initial points to ignore
 				plot_guinier (bool): whether to plot the guinier fit or not. Defaults to
 					False
 		"""
 		if verbose:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 		if error_lim == 0 or error_lim > 1:
-			print 'The provided error limit {}, is not a valid value. The error limit has\
-			to be included within (0,1]'.format(error_lim)
-			return 0
+			logger.error('The provided error limit {}, is not a valid value.\
+			The error limit has to be between (0,1]'.format(error_lim))
+			return False
 		if min_q < 3:
-			print 'In order for the fit to be valid there have to be at least 3 points\
-			over which to fit. The given number of points is {}'.format(min_q)
+			logger.error('In order for the fit to be valid there have to be at\
+			least 3 points over which to fit. The given number of points is {}'.format(min_q))
 			return 0
 
 		q_2 = self.q[skip_initial:]**2
 		I_log = np.log(self.Iabs[skip_initial:])
 		linMod = lmfit.models.LinearModel()
 		curr_q = min_q
-		logging.debug('Starting to fit the guinier regime from the {} point'.format(curr_q))
-		#guinierRegime = True
+		logger.debug('Starting to fit the guinier regime from the {} point'.format(curr_q))
+
 		advance = True
 		while advance:
 			params = linMod.guess(I_log[:curr_q], x = q_2[:curr_q])
 			result = linMod.fit(I_log[:curr_q],params = params, x = q_2[:curr_q])
-			logging.debug('Completed a fit with {} points.\n'.format(curr_q))
+
 			if result.params['slope'].value>0:
-				logging.error('Guinier approzimation cannot be calculated if the slope has a positive value. Try skipping more initial points.')
-				return
+				logger.error('Guinier approzimation cannot be calculated if the\
+				 slope has a positive value. Try skipping more initial points.')
+				return False
 			Rg = np.sqrt(-result.params['slope'].value*3)
 			error = np.mean(result.residual/I_log[:curr_q])
-			logging.debug('Completed a fit with {} points.\nRg:{}\nerror:{}'.format(curr_q,Rg,error))
+			logger.debug('Completed a fit with {} points.\nRg:{}\nerror:{}'.format(curr_q,Rg,error))
 			guinierRegime = Rg*self.q[(skip_initial+curr_q)]<1
 			logging.debug('The Rg*q is: {}'.format(Rg*self.q[(skip_initial+curr_q)]))
 			if error>error_lim or not guinierRegime:
+				logger.debug('The divergence between the linear fit and the\
+				actual date is too big, or the Rg*q_max is greater than 1\n\
+				Error:{curr_err}\tvs.\tAccepted Error:{lim_err}\n\
+				Rq*q_max:{Rgq}'.format(error,error_lim,Rg*self.q[(skip_initial+curr_q)]))
 				advance = False
 				curr_q -=1
 			else:
@@ -1050,22 +1071,27 @@ class SmallAngleScattering(ScatteringObject):
 			ax.plot(q_2[:curr_q], result.eval(x = q_2[:curr_q]), 'r', linewidth = 2)
 			ax.plot(q_2[:(2*curr_q)], result.eval(x = q_2[:(2*curr_q)]), 'r', linestyle = '--',linewidth = 2)
 
-		self.guinier_regime = {'fit_Result': result,'Numb_qs': curr_q,'q_lim': self.q[curr_q],'Guinier_valid': guinierRegime, 'Rg': Rg}
+		self.guinier_regime = {'fit_Result': result,
+							   'Numb_qs': curr_q,
+							   'q_lim': self.q[curr_q],
+							   'Guinier_valid': guinierRegime,
+							   'Rg': Rg,
+							   'skip_initial':skip_initial,
+							   }
 		return {'best_fit': result,'last_q_pos': skip_initial+curr_q, \
 				'last_q': self.q[(skip_initial+curr_q)],'within_Guinier': guinierRegime,\
 				'initial_points_skipped': skip_initial, 'Rg': Rg}
 
 	def find_porod_invariant(self, drho, units = 'm', qRange = [0,np.inf], precision = 0.1, postExtrap = None,\
-						preExtrap = None, plot = False):
-		"""porod_invariant: calculate the porod invariant for the given data. The porod
-		invariant is calculated as the integral of I*q^2. The data is integrated, and
-		then extrapolated to infinity by giving a constant slope to the signal of the
-		type I(q) = q^(slope). The complete equation is:
+						preExtrap = None, plot = False, verbose=False):
+		"""Calculate the porod invariant for the given data.
+		The porod invariant is calculated as the integral of I*q^2. The data is
+		integrated, and then extrapolated to infinity by giving a constant slope
+		to the signal of the type I(q) = q^(slope). The complete equation is:
 		Q = pi^2*phi*(1-phi)*(drho)^212
 		for simplicity, as the systems have a low volume fraction, the 1-phi is simplified
 		to 1. therefore
 		phi = Q/(2*np.pi**2*drho**2)
-
 			Args:
 				drho (int): the difference in scattering length density between the two
 					phases
@@ -1084,8 +1110,15 @@ class SmallAngleScattering(ScatteringObject):
 				preExtrap (int): the slope to use to interpolare at low q. If None is give
 					then the interpolation will be constant. Defaults to None
 		"""
-		tempq = self.q[np.logical_and(self.q>min(qRange), self.q<max(qRange))]
-		tempI = self.Iabs[np.logical_and(self.q>min(qRange), self.q<max(qRange))]
+
+		if verbose:
+			logger.setLevel(logging.DEBUG)
+		else:
+			logger.setLevel(logging.INFO)
+
+		mask = np.logical_and(self.q>min(qRange), self.q<max(qRange))
+		tempq = self.q[mask]
+		tempI = self.Iabs[mask]
 		Iq2 = tempI * tempq**2
 
 		if plot:
@@ -1122,9 +1155,9 @@ class SmallAngleScattering(ScatteringObject):
 				max_q = postExtrap[i].get('max_q', np.inf)
 
 				if np.isinf(max_q) and curr_slope > -3:
-					print 'The final regime cannot decrease slower than -3 (given{}), the integral will\
-					not converge.'. format(curr_slope)
-					return 0
+					logger.error('The final regime cannot decrease slower than -3 (given{}), the integral will\
+					not converge.'. format(curr_slope))
+					return False
 				I_ratio = last_I/extrap(last_q,1,curr_slope)
 				Q += sp.integrate.quad(extrap,last_q,max_q, args = (I_ratio, curr_slope))[0]
 
@@ -1162,7 +1195,7 @@ class SmallAngleScattering(ScatteringObject):
 		return Q/(2*np.pi**2*drho**2)
 
 	def get_fit_params(self, fitType, param = None, **kwargs):
-		'''get_fit_params returns a dictionary with the various fitting parameters as keys and
+		'''Return a dictionary with the various fitting parameters as keys and
 		the fit as values.
 			Args:
 				fitType (String): the fit type for which the parameters are required.
@@ -1173,12 +1206,12 @@ class SmallAngleScattering(ScatteringObject):
 			Return: returns the dictionary containing the fitting parameters and their values
 		'''
 		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 
 		if fitType not in _AvlbSASFit:
-			logging.error('{} is not a valid fit type for SAS data'.format(fitType))
+			logger.error('{} is not a valid fit type for SAS data'.format(fitType))
 		if self.fitResults[fitType] is None:
 			return None
 		if param is None:
@@ -1190,7 +1223,6 @@ class SmallAngleScattering(ScatteringObject):
 			elif isinstance(param, str):
 				return {param: self.fitResults[fitType].get(param, None)}
 			else:
-				logging.error('The format in which the parameter was passed is not recognizable: \n {} \n Please provide either a string or a list of strings'.format(param))
-
-	#def fit_avlb(self, fitType):
-		#if fitType in _AvlbSASFit:
+				logger.error('The format in which the parameter was passed is \
+				not recognizable: \n {} \n Please provide either a string or a \
+				list of strings'.format(param))
