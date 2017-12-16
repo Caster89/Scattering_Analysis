@@ -433,7 +433,9 @@ class SmallAngleScattering(ScatteringObject):
 																																									   result.message,\
 																																									   result.ier,\
 																																							   result.lmdif_message))
-			self.fitResults[fitType]['error_history']=error_history
+			#self.fitResults[fitType]['error_history']=error_history
+			
+
 		else:
 			result = model.fit(tempI, params = params, q=tempq, weights = 1./tempI, fit_kws = fit_kws)
 			logging.debug('_____________FIRST FIT____________\n The fit succeded: {}\n Lmfit message: {}\n The scipy return code is: {}\n The scipy message is: {}\n _______________________'.format(result.success,\
@@ -488,6 +490,8 @@ class SmallAngleScattering(ScatteringObject):
 		self.fitResults[fitType]['chi'] = result.chisqr
 		self.fitResults[fitType]['residual'] = result.residual
 		self.fitResults[fitType]['Units'] = self.qUnits
+		if store_history:
+			self.fitResults[fitType]['error_history']=error_history
 
 		#print 'The data for {} fit was updated to:\n{}'.format(fitType,self.fitResults[fitType])
 
