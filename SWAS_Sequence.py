@@ -21,10 +21,15 @@ from matplotlib.figure import Figure
 import scipy as sp
 from scipy import interpolate
 from mpl_toolkits.mplot3d import Axes3D
+
+logging.basicConfig(format='[@%(module)s.%(funcName)s] - %(levelname)s:%(message)s', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
 try :
 	import lmfit
 except ImportError:
-	print "Could not import the lmfit package. Some fittings will be disabled."
+	logger.alert("Could not import the lmfit package. Some fittings will be disabled.")
 	lmfitAvlb = False
 else:
 	lmfitAvlb = True
@@ -37,8 +42,6 @@ class SWAS_Sequence(object):
 	"""
 
 	def __init__(self,SAS_fname_list = None, WAS_fname_list = None, SA_dict = None, WA_dict = None, **kwargs):
-		#self.SAS_objects = None
-		#self.WAS_objects = None
 		self.SWAS_objects = None
 		self.size = 0
 		self.time = None
@@ -50,16 +53,33 @@ class SWAS_Sequence(object):
 			self.create_from_file_list(SAS_fname_list, WAS_fname_list, SA_dict, WA_dict)
 
 
-	def create_from_file_list(self,SAS_fname_list = None, WAS_fname_list = None, SA_dict = None, WA_dict = None):
-		"""create_from_file_list: function to create the SAS/WAS objects and place them in the
-		appropriate list. It also initializes the time and temperature lists.
+	def create_from_file_list(self,SAS_fname_list = None, WAS_fname_list = None,
+	 SA_dict = None, WA_dict = None, verbose=False):
+		"""Create the SAS/WAS objects and place them in the appropriate list.
+		Also initialize the time and temperature lists.
+			Args:
+				SAS_fname_list (iterable): an iterable containing the list of
+					files for each SAS curve. Each item can be itself an
+					iterable if each curve has not been averaged yet.
+				WAS_fname_list (iterable): an iterable containing the list of
+					files for each WAS curve. Each item can be itself an
+					iterable if each curve has not been averaged yet.
+				SA_dict (dict): A dictionary containing the keywords to pass
+					over to the function for the creation of the SAS object
+				WA_dict (dict): A dictionary containing the keywords to pass
+					over to the function for the creation of the WAS object
 		"""
+		if verbose:
+			logger.setLevel(logging.DEBUG)
+		else:
+			loger.setLevel(logging.INFO)
+
 		if SAS_fname_list is not None and WAS_fname_list is not None:
 			if len(SAS_fname_list) != len(WAS_fname_list):
-				print 'In order to correctly create the object, the number of SAS and WAS curves\
-				must be the same, or one of the two must not be given. SAS: {}, WAS: {}'.format(len(SAS_fname_list),\
-																								len(WAS_fname_list))
-				return 0
+				logger.error('In order to correctly create the object, the \
+				number of SAS and WAS curves must be the same, or one of the \
+				two must be None.\nSAS files: {}\nWASfiles: {}'.format(len(SAS_fname_list), len(WAS_fname_list))
+				return False
 			self.avlbCurves = 'Both'
 			self.SWAS_objects = []
 			i = 0
@@ -95,6 +115,7 @@ class SWAS_Sequence(object):
 				i += 1
 		self.time = np.arange(len(self.SWAS_objects))
 		self.Temp = np.array([23]*len(self.SWAS_objects))
+
 		for i,obj in enumerate(self.SWAS_objects):
 			if obj.get_Dt() is not None:
 				self.time[i] = obj.get_Dt[i]
@@ -120,8 +141,8 @@ class SWAS_Sequence(object):
 			self[i].WAS.set_abs_scale(absCoeff,thickness,bckgCoeff)
 
 	def set_temperature(self, Temp):
-		"""set_Temperature: sets the temperature vector, as well as copying the values in the idividual
-		scattering objects:
+		"""Set the temperature vector, as well as copy the values in the \
+		idividual scattering objects:
 			Args:
 				Temp (int or list): ether an int (if the temperature is constant), or a list.
 					If a list is provided it must have the same lengths a the number of objects
@@ -130,18 +151,18 @@ class SWAS_Sequence(object):
 			self.Temp = Temp
 			for i in xrange(len(self.SWAS_objects)):
 				self.SWAS_objects[i].set_Temp(Temp)
-		elif isinstance(Temp,list):
+		elif isinstance(Temp, collections.Iterable):
 			if len(Temp) != len(self.SWAS_objects):
-				print 'If  list of temperatures is given it must have the same size as the number\
-				of curves. Numb. Curves: {}, Numb. Temp: {}'.format(len(self.SWAS_objects),len(Temp))
-				return 0
+				logger.error('If  list of temperatures is given it must have the\
+				 same size as the number of curves.\nNumb. Curves: {}\nNumb. Temp: {}'.format(len(self.SWAS_objects),len(Temp)))
+				return False
 
 			self.Temp = np.array(Temp)
 			for i in xrange(len(self.SWAS_objects)):
 				self.SWAS_objects[i].set_Temp(Temp[i])
 
 	def set_time(self, time):
-		"""set_time: sets the time vector, as well as copying the values in the individual
+		"""Set the time vector, as well as copy the values in the individual
 		scattering objects:
 			Args:
 				Temp (int or list): ether an int (if the temperature is constant), or a list.
@@ -149,8 +170,8 @@ class SWAS_Sequence(object):
 		"""
 
 		if len(time) != len(self.SWAS_objects):
-			print 'If  list of time is given it must have the same size as the number\
-			of curves. Numb. Curves: {}, Numb. Temp: {}'.format(len(self.SWAS_objects),len(time))
+			logger.error('If  list of time is given it must have the same size \
+			as the number of curves\nNumb. Curves: {}\nNumb. Temp: {}'.format(len(self.SWAS_objects),len(time)))
 			return 0
 
 		self.time = np.array(time)
@@ -171,21 +192,24 @@ class SWAS_Sequence(object):
 		for i,idx in enumerate(range(0,self.size, frequency)):
 			self[idx].WAS.plot_data(qRange, yShift = yShift*i, ax = ax, color = colormap(float(idx)/float(self.size)))
 
-	def fit_data(self, fitType, fitList = -1, memory = False, **kwargs):
-		"""fit_data is used to fit the data in the SWAS_Sequence file
+	def fit_data(self, fitType, fitList = -1, memory = False, verbose=False, **kwargs):
+		"""Fit the data in the SWAS_Sequence file
 			Args:
-				fitType (String): a string containg the fit type to use for the fit. It is
-					passed to the individual fitting functions.
-				fitList [list of int]: a list containing the position of objects to fit. If
-					-1 the all the data objects are fitted. Defaults to -1
-				memory (bool): tells the function whether it should use the previous fit result
-					as the starting point for the current fit. Defaults to False
-				**kwargs (dict): the various kwargs which can be passed to the fitting function
+				fitType (String): a string containg the fit type to use for the
+					fit. It is passed to the individual fitting functions.
+				fitList [list of int]: a list containing the position of objects
+					to fit. If -1 the all the data objects are fitted.
+					Defaults to -1
+				memory (bool): tells the function whether it should use the
+					previous fit result as the starting point for the current
+					fit. Defaults to False
+				**kwargs (dict): the various kwargs which can be passed to the
+					fitting function
 				"""
-		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		if verbose:
+			logger.setLevel(logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 
 
 		if not isinstance(fitList, collections.Iterable):
@@ -197,50 +221,54 @@ class SWAS_Sequence(object):
 				params = self.SWAS_objects[fitList[0]].SAS.get_fit_params(fitType)
 				for i in fitList[1:]:
 					if i%100 == 0:
-						print 'SWAS_Sequence.fit_data(): Fitting curve {}'.format(i)
-					logging.debug('SWAS_Sequence.fit_data(): Fitting curve {}'.format(i))
+						logger.info('Fitting curve {}'.format(i))
+					logger.debug('Fitting curve {}'.format(i))
 					try:
 						self.SWAS_objects[i].SAS.fit_data(fitType, paramSugg = params, **kwargs)
-						#self.SWAS_objects[i].fit_SAS(fitType, paramSugg = params, **kwargs)
 						params = self.SWAS_objects[i].get_fit_params(fitType)
 					except:
-						logging.error('SWAS_Sequence.fit_data():At object {}, lmfit failed to do the fit and returned with error:\n{}'.format(i,sys.exc_info()[0]))
+						logger.error('At object {}, lmfit failed to do the fit and returned with error:\n{}'.format(i,sys.exc_info()[0]))
 						#logging.error('')
 
 			else:
 				for i in fitList:
 					if i%100 == 0:
-						print 'SWAS_Sequence.fit_data(): Fitting curve {}'.format(i)
-					logging.debug('Fitting curve {}'.format(i))
-					#try:
-					self.SWAS_objects[i].SAS.fit_data(fitType, **kwargs)
-					#self.SWAS_objects[i].fit_SAS(fitType, **kwargs)
-					#except:
-					#logging.error('SWAS_Sequence.fit_data():At object {}, lmfit failed to do the fit and returned with error:\n{}'.format(i,sys.exc_info()[0]))
-						#logging.error('')
+						logger.info'Fitting curve {}'.format(i)
+					logger.debug('Fitting curve {}'.format(i))
+					try:
+						self.SWAS_objects[i].SAS.fit_data(fitType, **kwargs)
+					except:
+						logger.error('At object {}, lmfit failed to do the fit\n{}'.format(i,sys.exc_info()[0]))
+
 
 		elif fitType in _AvlbWASFit:
 			if memory:
 				self.SWAS_objects[fitList[0]].fit_WAS(fitType, **kwargs)
 				params = self.SWAS_objects[fitList[0]].get_fit_params(fitType)
 				for i in fitList[1:]:
-					logging.debug('Fitting curve {}'.format(i))
-					self.SWAS_objects[i].fit_WAS(fitType, **params)
-					params = self.SWAS_objects[i].get_fit_params(fitType)
+					if i%100 == 0:
+						logger.info'Fitting curve {}'.format(i)
+					logger.debug('Fitting curve {}'.format(i))
+					try:
+						self.SWAS_objects[i].fit_WAS(fitType, **params)
+						params = self.SWAS_objects[i].get_fit_params(fitType)
+					except:
+						logger.error('At object {}, lmfit failed to do the fit\n{}'.format(i,sys.exc_info()[0]))
 			else:
 				for i in fitList:
+					if i%100 == 0:
+						logger.info'Fitting curve {}'.format(i)
 					logging.debug('Fitting curve {}'.format(i))
 					try :
 						self[i].fit_WAS(**kwargs)
-					except ZeroDivisionError:
-						print 'At object {}, lmfit failed to do the fit'.format(i)
+					except:
+						logger.error('At object {}, lmfit failed to do the fit\n{}'.format(i,sys.exc_info()[0]))
 
 		else:
-			print 'Fit type {} is not recognized'.format(fitType)
+			logger.error('Fit type {} is not recognized'.format(fitType))
 
-	def plot_param(self, fitType, param, ax = None, **kwargs):
-		'''plot_param: function used to plot the evolution of a parameter
-		over the sequence.
+	def plot_param(self, fitType, param, ax = None, verbose=False, **kwargs):
+		'''Plot the evolution of a parameter over the sequence.
 			Args:
 			fitType (String): the fit for which the parameter should be
 				plotted. Can be any one of the fits available
@@ -251,10 +279,14 @@ class SWAS_Sequence(object):
 				should be plotted.
 			**kwargs (dict): the various parameters for the plotting of the data
 		'''
+		if verbose:
+			logger.setLevel(logging.DEBUG)
+		else:
+			logger.setLevel(logging.INFO)
 
 		if fitType in _AvlbSASFit:
 			if fitType in _lmfitModels:
-				#
+
 				plotData = [obj.SAS.get_fit_params(fitType, param = param) for obj in self.SWAS_objects]
 				numbPlots = len(plotData[0])
 				if ax is None or len(ax)<numbPlots:
@@ -280,8 +312,8 @@ class SWAS_Sequence(object):
 				self._plot_PVM_param(plotData,ax)
 
 	def _plot_PVM_param(self, paramList, ax, **kwargs):
-		'''_plot_PVM_param: specific function used to plot the evolution
-		of the parameters from a Pseudo-Voigt fit.
+		'''Specific function used to plot the evolution of the parameters from a
+		 Pseudo-Voigt fit.
 		'''
 		numPlots = len(paramList[0])
 		keys = paramList[0].keys()
@@ -290,8 +322,8 @@ class SWAS_Sequence(object):
 			ax[i].scatter(self.time,tempPlot, c = self.time, cmap = kwargs.get('cmap', matplotlib.pyplot.cm.jet), edgecolor = 'face')
 
 	def _plot_lmfit_param(self, paramList,ax, **kwargs):
-		'''_plot_lmfit_param: specific function used to plot the evolution
-		of the parameters from a lmfit fit
+		'''Specific function used to plot the evolutionnof the parameters from a
+		 lmfit fit
 		'''
 		numPlots = len(paramList[0])
 		keys = paramList[0].keys()
@@ -299,42 +331,41 @@ class SWAS_Sequence(object):
 			tempPlot = [params.get(k,None) if params is not None else None for params in paramList]
 			ax[i].scatter(self.time,tempPlot, c = self.time, cmap = kwargs.get('cmap', matplotlib.pyplot.cm.jet), edgecolor = 'face')
 
-	def _plot_em_param(self, ax, paramList, **kwargs):
+	def _plot_em_param(self, ax, paramList, verbose **kwargs):
 
-		if kwargs.get('verbose', False):
-			print 'verbose is true'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		if verbose:
+			logger.setLevel(logging.DEBUG)
 		else:
-			print ' verbose is false'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
 
 
 		#logging.info('Plotting the evolution of the EM curve is still not implemented')
 		#if not isinstance(ax, Axes3D):
 			#fig = kwargs.get('fig',mpl.figure())
 			#ax = Axes3D(fig)
-		Dist = np.empty((self.size, paramList[0]['Rvec'].size))
-		print 'There are {} data sets'.format(self.size)
-		print 'The radius vector is divided in {} points'.format(paramList[0]['Rvec'].size)
+		dist = np.empty((self.size, paramList[0]['Rvec'].size))
+		logger.debug('There are {} data sets'.format(self.size))
+		logger.debug('The radius vector is divided in {} points'.format(paramList[0]['Rvec'].size))
 		for i in xrange(self.size):
+			dist[i] = paramList[i]['xk'].reshape((-1))
 
-			Dist[i] = paramList[i]['xk'].reshape((-1))
-		ax.imshow(Dist.T)
-		#ax.set_ylim(paramList[0]['Rvec'][0],paramList[0]['Rvec'][-1])
-		#ax.set_xlim(self.time[0],self.time[-1])
+		ax.imshow(dist.T)
 
-	def plot_SAS_fit(self, fitType, frequency = 50, yshift = 1, ax = None, fig = None, **kwargs):
-		'''plot_SAS_fit is used to plot the SAS date on a single axis along with
-		the fitted model.
+
+	def plot_SAS_fit(self, fitType, frequency = 50, yshift = 1, ax = None,
+					fig = None, verbose=False, figSize=(10,10), **kwargs):
+		'''Plot the SAS date on a single axis along with the fitted model.
+		Accepts all the arguments which would be passed on to the individual
+		plot method.
 		'''
-		if kwargs.get('verbose', False):
-			print 'logging set to debug'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.DEBUG)
+		if verbose:
+			logger.setLevel(logging.DEBUG)
 		else:
-			print 'logging set to info'
-			logging.basicConfig(format='%(levelname)s:%(message)s', level = logging.INFO)
+			logger.setLevel(logging.INFO)
+		if fig is None:
+			fig = Figure(figsize=figSize)
 		if (ax is None) or (fig is None):
-			fig = Figure(figsize=kwargs.get('figsize',(10,10)))
+
 			ax = [fig.add_subplot(111)]
 		elif isinstance(ax, list):
 			if not isinstance(ax[0], matplotlib.axes.Axes):

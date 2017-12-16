@@ -3,6 +3,7 @@ import numpy as np
 import scipy as sp
 from scipy import signal
 from scipy import interpolate
+from scipy.integrate import dblquad, tplquad
 import logging
 import lmfit
 from lmfit import minimize, Parameter, report_fit
@@ -16,11 +17,11 @@ except:
 deal with the large numbers required. The module was not found, so Decimal will\
 be used instead, but the calculations will be slower.'
 
-'''
+"""
 The distriutions presented here can be found in Polydispersity analysis of scattering
 data from self-assembled systems. Phy. Rev. A,45, 2428-2438.
 DOI: 10.1103/PhysRevA.45.2428
-'''
+"""
 def single_gauss_spheres(q,R_av = 1,sigma = 1,I0 = 1,bckg=0):
     """sing_gauss_spheres: calculates the scattering pattern of an assembly of
     spheres which have a Gaussian number density size distribution.
@@ -68,6 +69,7 @@ def double_gauss_spheres(q,R1_av = 1,sigma1 = 1, R2_av = 1, sigma2 = 1, I0 = 1,r
     """
     return np.array(ratio*single_gauss_spheres(q,R1_av, sigma1,I0,0)+(1-ratio)*single_gauss_spheres(q,R2_av, sigma2,I0,0)+bckg)
     #return I0*(GaussSpheres(q,R_av1, sigma1,ratio,0)+GaussSpheres(q,R_av2, sigma2,1-ratio,0))
+
 def single_schultz_spheres(q, R_av = 1, Z = 50, I0 = 1, bckg = 0 ):
     """sing_schultz_spheres: calculates the scattering pattern of an assembly of
     spheres which have a Schultz-Zimm size distribution. Devimal is used to
@@ -132,7 +134,6 @@ def single_schultz_spheres(q, R_av = 1, Z = 50, I0 = 1, bckg = 0 ):
     #print 'length is:{}, of which nan: {}'.format(len(returnVal), np.sum(np.isnan(returnVal)))
     return returnVal
 
-
 def single_schultz_spheres_old(q,R_av = 1,Z = 1, I0 = 1, bckg = 0):
     """sing_schultz_spheres: calculates the scattering pattern of an assembly of
     spheres which have a Flory schultz size distribution. the Z parameter is
@@ -190,6 +191,27 @@ def double_schultz_spheres(q, R1_av = 1, Z1 = 1, R2_av = 1,Z2 = 1, I0 = 1, ratio
     """
     return np.nan_to_num(ratio*single_schultz_spheres(q,R1_av,Z1,I0,0)+(1-ratio)*single_schultz_spheres(q,R2_av,Z2,I0,0)+bckg)
 
+"""
+http://www.sasview.org/sasview/user/models/model_functions.html#rectangularprismmodel
+"""
+def monodisperse_cube(q, L=1, I0=1, bckg = 0):
+    def A(theta,phi):
+        A = q*L/2.*cos(theta)
+        B = q*L/2.*sin(theta)*sin(phi)
+        C = q*L/2.*sin(theta)*cos(phi)
+        return np.sinc(A)*np.sinc(B)+np.sinc(C)
+    return 10**I0*dblquad(A,0,np.pi/2.,lambda x:0, lambda x:np.pi/2.0)[0]+bckg
+
+def single_gaussian_cube(q, L_av=1, sigma=1, I0=1, bckg = 0):
+    def A(theta,phi,L):
+        A = q*L/2.*cos(theta)
+        B = q*L/2.*sin(theta)*sin(phi)
+        C = q*L/2.*sin(theta)*cos(phi)
+        return single_gauss_distribution(L,L_av,sigma,1)*np.sinc(A)*np.sinc(B)+np.sinc(C)
+    l_min = max(0,L_av-4*(L_av*sigma))
+    l_max = L_av+4*(L_av*sigma)
+    return 10**I0*tplquad(A,0,np.pi/2.,lambda x:0, lambda x:np.pi/2.0,)[0]+bckg
+
 def single_gauss_distribution(x, R_av, sigma, I0):
     """single_gauss_distribution: returnd the PDF for a normal distribution
     given the necessary parameters.
@@ -198,9 +220,9 @@ def single_gauss_distribution(x, R_av, sigma, I0):
                 calculated
             R_av (int): the mean of the distribution
             sigma (int): the dispersion of the distribution
-            I0 (int): the intensity of hte distribution
+            I0 (int): the intensity of the distribution
         Returns
-            The vector with hte propability densities with the same size as x.
+            The vector with the propability densities with the same size as x.
     """
     return 10**(I0)*np.exp(-(x-R_av)**2/(2*sigma**2))/np.sqrt(2*sigma**2*np.pi)
 

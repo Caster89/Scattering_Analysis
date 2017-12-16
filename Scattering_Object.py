@@ -19,11 +19,40 @@ except ImportError:
 	lmfitAvlb = False
 else:
 	lmfitAvlb = True
-
+logging.basicConfig(format='[@%(module)s.%(funcName)s] - %(levelname)s:%(message)s', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class ScatteringObject(object):
 	"""Base Class used as parent for all the other scattering\n
 	classes
+	The standard values for all scattering objects are:
+		-q: The values of the wavevector
+		-Iframes: The raw data from the radial average of each individual frame
+		-Iraw: the raw data from the radial average of the scattering pattern
+		-Ibckg: the background intensity such as empty capillary or solvent
+		-Idark: The dark of the ccd camera, where applicable
+		-coeffBckg: The coefficient used to correct the intensity of the background
+		-coeffAbs: The coefficient used to bring the data's intensity to absolute units
+		-Inorm: The raw data with the background subtracted
+		-Iabs: The normalized date corrected for absolute values
+		-Ierr: The error on the scattering intensity
+		-qerr: The error on the q-values
+		-IbckgErr: The error on the background intensity
+		-qUnits: The units used for the wavevector
+		-IUnits: The units used for the scattered intensity
+		-setup: The data on the instumental setup:
+			-DetDistance: The sample detector distance
+			-Temp: The temperature during the measurement
+			-Dt: The time at which the measurement was done (time resolved exp)
+			-Thickness: The capillary's thickness
+			-Wavelength: The wavelength of the x-ray
+		-plot_dict: All parameters for plotting the scattered data, must be
+					keywords used in matplotlib
+		-fit_plot_dict: All parameterd for plotting the fitted curve, must
+					be keywords used in matplotlib
+		-sampleName: The name of the sample
+
+
 	"""
 
 	def __init__(self, fname = None, **kwargs):
@@ -40,7 +69,7 @@ class ScatteringObject(object):
 			- delimiter: the delimiter used in the csv
 			- qUnits: the units for the wavevector used in the file
 			- IUnits: the units used for the intensity in the file
-			- DetDistance: the distance between the sample and detector
+			- DetDistance: the distance between the sample and detector (m)
 			- Temp: the temperature of the sample
 			- Dt: the time elapsed since the beginning of the measurement
 			- Wavelength: the wavelength of the incident beam
@@ -56,35 +85,6 @@ class ScatteringObject(object):
 						and its position
 		"""
 
-		"""
-		The standard values for all scattering objects are:
-			-q: The values of the wavevector
-			-Iframes: The raw data from the radial average of each individual frame
-			-Iraw: the raw data from the radial average of the scattering pattern
-			-Ibckg: the background intensity such as empty capillary or solvent
-			-Idark: The dark of the ccd camera, where applicable
-			-coeffBckg: The coefficient used to correct the intensity of the background
-			-coeffAbs: The coefficient used to bring the data's intensity to absolute units
-			-Inorm: The raw data with the background subtracted
-			-Iabs: The normalized date corrected for absolute values
-			-Ierr: The error on the scattering intensity
-			-qerr: The error on the q-values
-			-IbckgErr: The error on the background intensity
-			-qUnits: The units used for the wavevector
-			-IUnits: The units used for the scattered intensity
-			-setup: The data on the instumental setup:
-				-DetDistance: The sample detector distance
-				-Temp: The temperature during the measurement
-				-Dt: The time at which the measurement was done (time resolved exp)
-				-Thickness: The capillary's thickness
-				-Wavelength: The wavelength of the x-ray
-			-plot_dict: All parameters for plotting the scattered data, must be
-						keywords used in matplotlib
-			-fit_plot_dict: All parameterd for plotting the fitted curve, must
-						be keywords used in matplotlib
-			-sampleName: The name of the sample
-
-		"""
 		self.q = None
 		self.Iframes = None
 		self.Iraw = None
@@ -121,8 +121,10 @@ class ScatteringObject(object):
 			passArguments = {kw : kwargs[kw] for kw in createKeywords if kw in kwargs}
 			self.create_from_file(fname, **passArguments)
 
-	def create_from_file(self, fname, **kwargs):
-		"""Reads the data from a file into the object.
+	def create_from_file(self, fname, qcol=0, Icol=1, Errcol=-1,skip_header=2,
+						delimiter=';', qUnits='nm', IUnits='nm', bckgFname=None,
+						readHeader=None, **kwargs):
+		"""Read the data from a file into the object.
 		Args:
 			fname (string/stirng list): the complete path to the file which
 				contains the scattering data. The data can be either a string
@@ -145,18 +147,20 @@ class ScatteringObject(object):
 				no background is imported. Defaults to None
 			readHeader (dict): dictionary containing the information to read the header in
 				order to retrieve the information to store in Setup dictionary:
-
 				Elements:
 					linePos (int): indicates which line to use for the header. linePos has to
 						be < skip_header. Defaults to 0
 					delimiter (string): the delimiter used in the header. Defaults to the delimiter
 						used in the file
 					field (dict): dictionary containing the name of the field and its position
+				Defaults to None
 		"""
 		if kwargs.get('verbose', False):
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+			logger.setLevel(logging.DEBUG)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 		#The values used to import the data are either read, or if not passed
 		#are set to their default value
 		qcol = kwargs.get('qcol', 0)
@@ -180,29 +184,28 @@ class ScatteringObject(object):
 				self.Ierr = temp[:,Errcol]
 
 		elif isinstance(fname, collections.Iterable):
-			'''
+			"""
 			If fname is an iterable then it is supposed that each element is a
 			file and is loaded in Iframes.
-			'''
+			"""
 			temp = np.genfromtxt(fname[0],skip_header=skip_header, delimiter = delimiter)
 			self.q = temp[:, qcol]
 			self.Iframes = np.empty( (len(self.q), len(fname)) )
 			for cc, fn in enumerate(fname):
 				self.Iframes[:,cc] = np.genfromtxt(fn,skip_header=skip_header, delimiter = delimiter, usecols = Icol)
 			self.Iraw = self.Iframes.mean(axis = 1)
-			##TODO: Add the error in case of multi frames. In this case it
+			#TODO: Add the error in case of multi frames. In this case it
 			#should be either and "average" of the errors per frame or a std
 			#deviation between the different frames
-		'''
+		"""
 		Inorm and Iabs are initiated as equal to the raw data in order for the
 		class to be usable in case the user does not intend to do any
 		normalisation on the data.
-		'''
+		"""
 		self.Inorm = temp[:,Icol]
 		self.Iabs = temp[:,Icol]
 
-		#This block should have been substituted by setting qUnits and IUnits
-		#as properties
+		#TODO: Remove this block of code if not used anymore
 		'''
 		if kwargs.get('qUnits', None) is not None:
 			if kwargs.get('qUnits') in _AvlbUnits:
@@ -234,7 +237,9 @@ class ScatteringObject(object):
 					if Errcol != -1:
 						self.IbckgErr = temp[:,Errcol]
 				else:
-					logging.error("Size mismatch: the Bckg vector must have the same size as the I vector, the background was not imported.")
+					logger.error("Size mismatch: the background vector must have the same size as the I vector, the background was not imported.")
+					self.Ibckg = np.zeros(self.Iraw.shape)
+					self.coeffBckg = 1
 
 			elif isinstance(bckgFname, collections.Iterable):
 				temp = np.genfromtxt(bckgFname[0],skip_header=skip_header, delimiter = delimiter)
@@ -244,7 +249,7 @@ class ScatteringObject(object):
 						self.IbckgFrames[:,cc] = np.genfromtxt(fn,skip_header=skip_header, delimiter = delimiter, usecols = Icol)
 					self.Ibckg = self.IbckgFrames.mean(axis = 1)
 				else:
-					logging.error("Size mismatch: the Bckg vector must have the same size as the I vector, the background was not imported.")
+					logger.error("Size mismatch: the background vector must have the same size as the I vector, the background was not imported.")
 					self.Ibckg = np.zeros(self.Iraw.shape)
 					self.coeffBckg = 1
 
@@ -260,8 +265,9 @@ class ScatteringObject(object):
 			for kword in readHeader:
 				self._setup[kword] = readHeader[kword]
 
-	def create_from_data(self, q, I, Ibckg = None, qUnits = 'nm', IUnits = 'm'):
-		"""Sets data by passing both the q values and the intesity
+	def create_from_data(self, q, I, Ibckg = None, qUnits = 'nm', IUnits = 'm',
+						**kwargs):
+		"""Set data using the values of q and I passed as iterables
 			Args:
 				q (list): the q vector.
 				I (list): the intensity vector
@@ -271,45 +277,53 @@ class ScatteringObject(object):
 				Iunits (string): the units of the intensity vector. Has to be in _AvlbUnits
 					in the config.py file. Defaults to 'm'
 		"""
+		if kwargs.get('verbose', False):
+			logger.setLevel(logging.DEBUG)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		else:
+			logger.setLevel(logging.INFO)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
 		if len(q) == len(I):
 			self.q = np.array(q)
 			self.Iraw = np.array(I)
 		else:
-			print "Size mismatch: the q vector must have the same size as the I vector"
-			return 0
+			logger.error("Size mismatch: the q vector must have the same size as the I vector")
+			return False
 		if Ibckg is not None:
 			if len(Ibckg) == len(q):
 				self.Ibckg = np.array(Ibckg)
 			else:
-				print r"Size mismatch: the Bckg vector must have the same size as the I \n \
-				 vector, the background was not imported."
+				logger.error(r"Size mismatch: the Bckg vector must have the same size as the I\
+				 vector, the background was not imported.")
 		else:
 			self.Ibckg = np.zeros(self.Iraw.shape)
 			self.coeffBckg = 1
+
 		if qUnits is not None:
 			if qUnits in _AvlbUnits:
 				self.qUnits = qUnits
 			else:
-				print r"{} is not a recognized unit. The available units are:\n".format(qunits)
+				logger.error(r"{} is not a recognized unit. The available units are:\n".format(qUnits))
 				for unt in AvlbUnits:
 					print r"\t - ", unt
 		if IUnits is not None:
 			if IUnits in _AvlbUnits:
 				self.IUnits = IUnits
 			else:
-				print r"{} is not a recognized unit. The available units are:\n".format(Iunits)
+				logger.error(r"{} is not a recognized unit. The available units are:\n".format(IUnits))
 				for unt in AvlbUnits:
 					print r"\t - ", unt
 
 	def find_bckg_scale(self, qRange = [0,np.inf], applyNorm = False, plot=False,\
 	 					ax = None, verbose = False):
-		"""Compares the raw intensity to the background within the
-		qRange specified. It finds the best coefficient by which to multiply the
-		background so as to minimize the difference between the two. If the lmfit module
-		is present it does it using the lmfit functions, if not by using a simple average.
-		If apply is set to True then the coefficient will be stored and the Inorm will
-		be updated. If plot is selected then it will plot the raw data and the corrected
-		background.
+		"""Determine the best coefficient to apply to the background signal
+		Compare the raw intensity to the background within the qRange specified.
+		Find the best coefficient by which to multiply the background so as to
+		minimize the difference between the two. If the lmfit module is present
+		use the lmfit functions, if not by use a simple average. If apply is set
+		to True then store the coefficient and update the Inorm. If plot is
+		selected then plot the raw data and the scaled background.
 			Args:
 				qRange (list): contains the q range limits used to normalize the background.
 					Defaults to [0, np.inf].
@@ -319,10 +333,12 @@ class ScatteringObject(object):
 				plot (bool): tells whether the beckground normaliztion should be plotted. Defaults
 					to False
 		"""
-		if verbose is False:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		if kwargs.get('verbose', False):
+			logger.setLevel(logging.DEBUG)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 		else:
-			logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+			logger.setLevel(logging.INFO)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
 		mask = np.logical_and(self.q>min(qRange), self.q<max(qRange))
 		tempq = self.q[mask]
@@ -347,7 +363,7 @@ class ScatteringObject(object):
 				self.IbckgErr = self.IbckgErr*coeff
 
 		if plot:
-			#print 'plotting'
+
 			if ax is None:
 				fig = Figure(figsize = (6,6))
 				ax = fig.add_subplot(111)
@@ -358,7 +374,7 @@ class ScatteringObject(object):
 			#plt.show()
 
 	def set_abs_scale(self, absCoeff=1, thickness = None, bckgCoeff = None):
-		"""set_abs_scale: applies the corrections necessary to set the data in absolute
+		"""Apply the corrections necessary to set the data in absolute
 		scale. Requires that the coeffBckg and thickness be set.
 			Args:
 				absCoeff (int): the integer by which the signal has to be multiplied in
@@ -369,9 +385,13 @@ class ScatteringObject(object):
 					for a correct subtraction. It can be set or changed from here.
 					Defaults to None
 		"""
-		#if self.Ibckg is None:
-			#print "Cannot calculate the signal at absolute scale without a background"
-			#return 0
+		if kwargs.get('verbose', False):
+			logger.setLevel(logging.DEBUG)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		else:
+			logger.setLevel(logging.INFO)
+			#logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
 		if thickness is not None:
 			print "Setting the thickness to {} {}. Make sure the units are correct".format(thickness,self.IUnits)
 			self.setup['Thickness'] = thickness
@@ -382,8 +402,8 @@ class ScatteringObject(object):
 				#self.IbckgErr = self.IbckgErr*self.coeffBckg
 
 		if self.setup['Thickness'] is None:
-			print "Cannot calculate the signal at absolute scale without the sample's thickness"
-			return 0
+			logger.error("Cannot calculate the signal at absolute scale without the sample's thickness")
+			return False
 		#if self.coeffBckg is None:
 			#print "Cannot calculate the signal at absolute scale without the background"
 			#return 0
@@ -395,13 +415,13 @@ class ScatteringObject(object):
 			self.IbckgErr =self.IbckgErr*self.setup['Thickness']*self.coeffAbs
 
 	def plot_data(self, **kwargs):
-		print "Method not implemented in parent classe"
+		logger.error("Method not implemented in parent classe")
 
 	def fit_data(self, ):
-		print "Method not implemented in parent classe"
+		logger.error("Method not implemented in parent classe")
 
 	def save_to_file(self, directory = None, fileName = None):
-		"""save_to_file: saves the class to a file.
+		"""Save the class to a file.
 			Args:
 				directory (string): the directory in which to save
 					the file. If None then the current working directory
@@ -438,9 +458,9 @@ class ScatteringObject(object):
 			print os.path.join(directory, fileName), ' is not a file'
 			return None
 
-	'''
+	"""
 	DEFINITION OF ALL THE PROPERTIES OF THE CLASS
-	'''
+	"""
 
 	###UNITS USED FOR THE INTENSITY###
 	@property
